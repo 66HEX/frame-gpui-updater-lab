@@ -129,9 +129,6 @@
 	},
 	"video": {
 		"resolutionFramerate": "Resolution & Framerate",
-		"rotation": "Rotation",
-		"flipHorizontal": "Horizontal",
-		"flipVertical": "Vertical",
 		"width": "Width",
 		"height": "Height",
 		"scalingAlgorithm": "Scaling Algorithm",
@@ -246,12 +243,12 @@
 		"conversionFailed": "Conversion Failed"
 	},
 	"trim": {
+		"label": "Trim",
 		"startTime": "Start Time",
 		"endTime": "End Time",
 		"duration": "Duration"
 	},
 	"crop": {
-		"enter": "Crop",
 		"apply": "Apply",
 		"reset": "Reset",
 		"free": "Free"

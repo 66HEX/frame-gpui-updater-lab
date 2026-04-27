@@ -8,7 +8,7 @@
 	import { FileList, EmptySelection } from '$lib/components/file-list';
 	import SettingsPanel from '$lib/components/settings/SettingsPanel.svelte';
 	import AppSettingsSheet from '$lib/components/AppSettingsSheet.svelte';
-	import PreviewPanel from '$lib/components/PreviewPanel.svelte';
+	import { PreviewPanel } from '$lib/components/preview';
 	import { _ } from '$lib/i18n';
 
 	import { initCapabilities } from '$lib/stores/capabilities.svelte';

@@ -129,9 +129,6 @@
 	},
 	"video": {
 		"resolutionFramerate": "Разрешение и частота кадров",
-		"rotation": "Вращение",
-		"flipHorizontal": "Горизонтальный",
-		"flipVertical": "Вертикальный",
 		"width": "Ширина",
 		"height": "Высота",
 		"scalingAlgorithm": "Алгоритм масштабирования",
@@ -246,12 +243,12 @@
 		"conversionFailed": "Преобразование не удалось"
 	},
 	"trim": {
+		"label": "Обрезка",
 		"startTime": "Время начала",
 		"endTime": "Конец времени",
 		"duration": "Продолжительность"
 	},
 	"crop": {
-		"enter": "Урожай",
 		"apply": "Применить",
 		"reset": "Сброс",
 		"free": "Бесплатно"

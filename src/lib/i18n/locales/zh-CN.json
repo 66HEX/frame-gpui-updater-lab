@@ -129,9 +129,6 @@
 	},
 	"video": {
 		"resolutionFramerate": "分辨率与帧率",
-		"rotation": "旋转",
-		"flipHorizontal": "水平翻转",
-		"flipVertical": "垂直翻转",
 		"width": "宽度",
 		"height": "高度",
 		"scalingAlgorithm": "缩放算法",
@@ -246,12 +243,12 @@
 		"conversionFailed": "转换失败"
 	},
 	"trim": {
+		"label": "修剪",
 		"startTime": "开始时间",
 		"endTime": "结束时间",
 		"duration": "时长"
 	},
 	"crop": {
-		"enter": "裁剪",
 		"apply": "应用",
 		"reset": "重置",
 		"free": "自由"

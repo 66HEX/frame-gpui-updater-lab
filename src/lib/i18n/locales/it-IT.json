@@ -129,9 +129,6 @@
 	},
 	"video": {
 		"resolutionFramerate": "Risoluzione e frequenza dei fotogrammi",
-		"rotation": "Rotazione",
-		"flipHorizontal": "Orizzontale",
-		"flipVertical": "Verticale",
 		"width": "Larghezza",
 		"height": "Altezza",
 		"scalingAlgorithm": "Algoritmo di ridimensionamento",
@@ -246,12 +243,12 @@
 		"conversionFailed": "Conversione non riuscita"
 	},
 	"trim": {
+		"label": "Ritaglio",
 		"startTime": "Ora di inizio",
 		"endTime": "Ora di fine",
 		"duration": "Durata"
 	},
 	"crop": {
-		"enter": "Raccolto",
 		"apply": "Applicare",
 		"reset": "Reimposta",
 		"free": "Gratuito"

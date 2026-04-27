@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pixi Preview Renderer:** Added a Pixi.js-backed preview renderer for video/image presentation, including WebGPU preference, explicit frame rendering for paused/seeked video frames, and HiDPI canvas density capped at `2x`.
+- **Modular Preview Architecture:** Split the monolithic preview panel into focused preview components and Svelte controllers for rendering, playback, crop state, toolbar actions, and trim timeline handling.
+- **Trim Timeline Label Localization:** Added a localized trim timeline label across all supported UI dictionaries.
+
+### Changed
+
+- **Preview Timeline Layout:** Reworked trim controls into a compact minimal timeline paired with timecode inputs, including direct seek support, hover/current-time indicators, and disabled image-state handling.
+- **Preview Crop/Transform Controls:** Moved rotation, flip, crop, and crop-aspect controls into overlay toolbars around the preview surface while keeping crop transforms synchronized with persisted settings.
+- **Preview Media Pipeline:** Switched video/image preview rendering from DOM media transforms to a Pixi canvas scene, while keeping audio preview on a hidden native audio element.
+
+### Removed
+
+- **Preview Tooltip Locale Keys:** Removed unused preview toolbar tooltip locale keys after replacing those labels with icon-only overlay controls.
+
 ## [0.28.0] - 2026-04-21
 
 ### Added

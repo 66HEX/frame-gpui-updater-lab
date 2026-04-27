@@ -129,9 +129,6 @@
 	},
 	"video": {
 		"resolutionFramerate": "解像度とフレームレート",
-		"rotation": "回転",
-		"flipHorizontal": "水平",
-		"flipVertical": "垂直",
 		"width": "幅",
 		"height": "身長",
 		"scalingAlgorithm": "スケーリングアルゴリズム",
@@ -246,12 +243,12 @@
 		"conversionFailed": "変換に失敗しました"
 	},
 	"trim": {
+		"label": "トリム",
 		"startTime": "開始時刻",
 		"endTime": "終末",
 		"duration": "期間"
 	},
 	"crop": {
-		"enter": "作物",
 		"apply": "適用する",
 		"reset": "リセット",
 		"free": "無料"
