@@ -196,7 +196,8 @@ fn frame_logo() -> gpui::Div {
             svg()
                 .path(assets::ICON_FRAME)
                 .w(px(TITLEBAR_LOGO_SIZE))
-                .h(px(TITLEBAR_LOGO_SIZE)),
+                .h(px(TITLEBAR_LOGO_SIZE))
+                .text_color(color(theme::FRAME_GRAY_600)),
         )
 }
 
@@ -255,7 +256,11 @@ fn titlebar_stat(icon: &'static str, label: String) -> gpui::Div {
         .flex()
         .items_center()
         .gap_2()
-        .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
+        .child(icon_svg(
+            icon,
+            TITLEBAR_ICON_SIZE,
+            color(theme::FRAME_GRAY_600),
+        ))
         .child(label)
 }
 
@@ -296,7 +301,15 @@ fn titlebar_segment(
             }
             cx.stop_propagation();
         }))
-        .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
+        .child(icon_svg(
+            icon,
+            TITLEBAR_ICON_SIZE,
+            if selected {
+                color(theme::FOREGROUND)
+            } else {
+                color(theme::FRAME_GRAY_600)
+            },
+        ))
         .child(label)
 }
 
@@ -318,6 +331,11 @@ fn action_button(
         (ButtonVariant::Default, false) => theme::FRAME_GRAY_400.with_alpha(0.10),
         (ButtonVariant::Secondary, true | false) => theme::FRAME_GRAY_100,
     };
+    let button_icon_color = if enabled {
+        color(theme::FOREGROUND)
+    } else {
+        color(theme::FOREGROUND.with_alpha(0.50))
+    };
 
     let button = div()
         .h(px(TITLEBAR_BUTTON_HEIGHT))
@@ -338,19 +356,25 @@ fn action_button(
         });
 
     if is_icon_only {
-        button
-            .w(px(TITLEBAR_ICON_BUTTON_SIZE))
-            .child(icon_svg(icon, TITLEBAR_ACTION_ICON_SIZE))
+        button.w(px(TITLEBAR_ICON_BUTTON_SIZE)).child(icon_svg(
+            icon,
+            TITLEBAR_ACTION_ICON_SIZE,
+            button_icon_color,
+        ))
     } else {
         button
             .px(px(10.0))
-            .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
+            .child(icon_svg(icon, TITLEBAR_ICON_SIZE, button_icon_color))
             .child(label.unwrap_or_default())
     }
 }
 
-fn icon_svg(path: &'static str, size: f32) -> impl IntoElement {
-    svg().path(path).w(px(size)).h(px(size))
+fn icon_svg(path: &'static str, size: f32, icon_color: Rgba) -> impl IntoElement {
+    svg()
+        .path(path)
+        .w(px(size))
+        .h(px(size))
+        .text_color(icon_color)
 }
 
 fn parse_hex(hex: &str) -> Rgba {
