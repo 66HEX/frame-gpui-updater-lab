@@ -1,0 +1,21 @@
+[package]
+name = "frame-gpui-ce"
+version = "0.1.0"
+edition = "2024"
+authors = ["Marek Jozwiak <hexthecoder@gmail.com>"]
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+gpui = { package = "gpui", git = "https://github.com/gpui-ce/gpui-ce" }
+gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce" }
+
+[lints.rust]
+future-incompatible = "warn"
+nonstandard-style = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = 10 }
+redundant_clone = { level = "deny", priority = 9 }
+clone_on_copy = { level = "deny", priority = 9 }
+needless_collect = { level = "deny", priority = 8 }

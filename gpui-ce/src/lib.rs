@@ -1,0 +1,160 @@
+//! Shared state and layout contracts for the native GPUI-CE rewrite of Frame.
+
+pub mod file_queue;
+pub mod theme;
+
+use file_queue::FileQueue;
+
+pub const WINDOW_MIN_WIDTH: f32 = 1200.0;
+pub const WINDOW_MIN_HEIGHT: f32 = 800.0;
+pub const CONTENT_PADDING: f32 = 16.0;
+pub const WORKSPACE_COLUMNS: u16 = 12;
+pub const WORKSPACE_GAP: f32 = 16.0;
+pub const LEFT_COLUMN_SPAN: u16 = 8;
+pub const RIGHT_COLUMN_SPAN: u16 = 4;
+pub const LEFT_GRID_ROWS: u16 = 12;
+pub const PREVIEW_ROW_SPAN: u16 = 8;
+pub const FILE_LIST_ROW_SPAN: u16 = 4;
+pub const PANEL_HEADER_HEIGHT: f32 = 40.0;
+pub const FILE_ROW_HEIGHT: f32 = 40.0;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActiveView {
+    Workspace,
+    Logs,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrameAppState {
+    pub active_view: ActiveView,
+    pub is_processing: bool,
+    pub file_count: usize,
+    pub selected_count: usize,
+    pub has_actionable_files: bool,
+    pub total_size_bytes: u64,
+}
+
+impl Default for FrameAppState {
+    fn default() -> Self {
+        Self {
+            active_view: ActiveView::Workspace,
+            is_processing: false,
+            file_count: 0,
+            selected_count: 0,
+            has_actionable_files: false,
+            total_size_bytes: 0,
+        }
+    }
+}
+
+impl FrameAppState {
+    #[must_use]
+    pub const fn can_start_conversion(self) -> bool {
+        !self.is_processing && self.selected_count > 0 && self.has_actionable_files
+    }
+
+    #[must_use]
+    pub fn from_file_queue(
+        active_view: ActiveView,
+        is_processing: bool,
+        file_queue: &FileQueue,
+    ) -> Self {
+        Self {
+            active_view,
+            is_processing,
+            file_count: file_queue.files().len(),
+            selected_count: file_queue.selected_count(),
+            has_actionable_files: file_queue.has_actionable_files(),
+            total_size_bytes: file_queue.total_size_bytes(),
+        }
+    }
+}
+
+#[must_use]
+pub fn format_total_size(bytes: u64) -> String {
+    if bytes == 0 {
+        return "0 KB".to_string();
+    }
+
+    let mb = bytes as f64 / (1024.0 * 1024.0);
+    if mb > 1000.0 {
+        format!("{:.2} GB", mb / 1024.0)
+    } else {
+        format!("{mb:.1} MB")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod frame_app_state {
+        use super::*;
+
+        #[test]
+        fn can_start_conversion_returns_true_when_selection_has_pending_work() {
+            let state = FrameAppState {
+                selected_count: 1,
+                has_actionable_files: true,
+                ..FrameAppState::default()
+            };
+
+            assert!(state.can_start_conversion());
+        }
+
+        #[test]
+        fn can_start_conversion_returns_false_when_app_is_processing() {
+            let state = FrameAppState {
+                is_processing: true,
+                selected_count: 1,
+                has_actionable_files: true,
+                ..FrameAppState::default()
+            };
+
+            assert!(!state.can_start_conversion());
+        }
+
+        #[test]
+        fn from_file_queue_uses_queue_derived_counts() {
+            let mut queue = FileQueue::new();
+            queue.add_file(file_queue::FileItem::from_path("first", "/tmp/one.mp4", 10));
+
+            let state = FrameAppState::from_file_queue(ActiveView::Workspace, false, &queue);
+
+            assert_eq!(state.file_count, 1);
+        }
+    }
+
+    mod format_total_size {
+        use super::*;
+
+        #[test]
+        fn returns_zero_kilobytes_when_size_is_empty() {
+            assert_eq!(format_total_size(0), "0 KB");
+        }
+
+        #[test]
+        fn returns_megabytes_below_browser_threshold() {
+            assert_eq!(format_total_size(512 * 1024 * 1024), "512.0 MB");
+        }
+
+        #[test]
+        fn returns_gigabytes_above_browser_threshold() {
+            assert_eq!(format_total_size(2 * 1024 * 1024 * 1024), "2.00 GB");
+        }
+    }
+
+    mod layout_contract {
+        use super::*;
+
+        #[test]
+        fn workspace_columns_preserve_original_left_right_split() {
+            assert_eq!(LEFT_COLUMN_SPAN + RIGHT_COLUMN_SPAN, WORKSPACE_COLUMNS);
+        }
+
+        #[test]
+        fn left_workspace_rows_preserve_original_preview_file_list_split() {
+            assert_eq!(PREVIEW_ROW_SPAN + FILE_LIST_ROW_SPAN, LEFT_GRID_ROWS);
+        }
+    }
+}
