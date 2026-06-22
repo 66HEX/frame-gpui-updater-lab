@@ -1,5 +1,6 @@
 //! Shared state and layout contracts for the native GPUI-CE rewrite of Frame.
 
+pub mod assets;
 pub mod file_queue;
 pub mod theme;
 
@@ -8,6 +9,17 @@ use file_queue::FileQueue;
 pub const WINDOW_MIN_WIDTH: f32 = 1200.0;
 pub const WINDOW_MIN_HEIGHT: f32 = 800.0;
 pub const CONTENT_PADDING: f32 = 16.0;
+pub const TITLEBAR_HEIGHT: f32 = 40.0;
+pub const TITLEBAR_TOP_PADDING: f32 = 8.0;
+pub const TITLEBAR_TRAFFIC_LIGHT_SIZE: f32 = 24.0;
+pub const TITLEBAR_LOGO_SIZE: f32 = 20.0;
+pub const TITLEBAR_DIVIDER_HEIGHT: f32 = 24.0;
+pub const TITLEBAR_SEGMENT_HEIGHT: f32 = 30.0;
+pub const TITLEBAR_BUTTON_HEIGHT: f32 = 30.0;
+pub const TITLEBAR_ICON_BUTTON_SIZE: f32 = 30.0;
+pub const TITLEBAR_NAV_BUTTON_HEIGHT: f32 = 24.0;
+pub const TITLEBAR_ICON_SIZE: f32 = 14.0;
+pub const TITLEBAR_ACTION_ICON_SIZE: f32 = 16.0;
 pub const WORKSPACE_COLUMNS: u16 = 12;
 pub const WORKSPACE_GAP: f32 = 16.0;
 pub const LEFT_COLUMN_SPAN: u16 = 8;
@@ -15,7 +27,7 @@ pub const RIGHT_COLUMN_SPAN: u16 = 4;
 pub const LEFT_GRID_ROWS: u16 = 12;
 pub const PREVIEW_ROW_SPAN: u16 = 8;
 pub const FILE_LIST_ROW_SPAN: u16 = 4;
-pub const PANEL_HEADER_HEIGHT: f32 = 40.0;
+pub const PANEL_HEADER_HEIGHT: f32 = TITLEBAR_HEIGHT;
 pub const FILE_ROW_HEIGHT: f32 = 40.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -155,6 +167,21 @@ mod tests {
         #[test]
         fn left_workspace_rows_preserve_original_preview_file_list_split() {
             assert_eq!(PREVIEW_ROW_SPAN + FILE_LIST_ROW_SPAN, LEFT_GRID_ROWS);
+        }
+
+        #[test]
+        fn titlebar_height_matches_shared_panel_header_height() {
+            assert_eq!(TITLEBAR_HEIGHT, PANEL_HEADER_HEIGHT);
+        }
+
+        #[test]
+        fn macos_traffic_lights_preserve_original_hit_area() {
+            assert_eq!(TITLEBAR_TRAFFIC_LIGHT_SIZE, 24.0);
+        }
+
+        #[test]
+        fn titlebar_segment_matches_original_thirty_pixel_control() {
+            assert_eq!(TITLEBAR_SEGMENT_HEIGHT, 30.0);
         }
     }
 }

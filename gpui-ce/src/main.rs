@@ -1,7 +1,11 @@
 use frame_gpui_ce::{
     ActiveView, CONTENT_PADDING, FILE_LIST_ROW_SPAN, FILE_ROW_HEIGHT, FrameAppState,
     LEFT_COLUMN_SPAN, LEFT_GRID_ROWS, PANEL_HEADER_HEIGHT, PREVIEW_ROW_SPAN, RIGHT_COLUMN_SPAN,
-    WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WORKSPACE_COLUMNS, WORKSPACE_GAP,
+    TITLEBAR_ACTION_ICON_SIZE, TITLEBAR_BUTTON_HEIGHT, TITLEBAR_DIVIDER_HEIGHT, TITLEBAR_HEIGHT,
+    TITLEBAR_ICON_BUTTON_SIZE, TITLEBAR_ICON_SIZE, TITLEBAR_LOGO_SIZE, TITLEBAR_NAV_BUTTON_HEIGHT,
+    TITLEBAR_SEGMENT_HEIGHT, TITLEBAR_TOP_PADDING, TITLEBAR_TRAFFIC_LIGHT_SIZE, WINDOW_MIN_HEIGHT,
+    WINDOW_MIN_WIDTH, WORKSPACE_COLUMNS, WORKSPACE_GAP,
+    assets::{self, FrameAssets},
     file_queue::{
         BatchSelectionState, FileItem, FileQueue, FileStateTone, RowActionAvailability,
         format_file_size,
@@ -11,8 +15,8 @@ use frame_gpui_ce::{
 use gpui::{
     App, Bounds, BoxShadow, ClickEvent, Context, InteractiveElement, IntoElement, KeyBinding, Menu,
     MenuItem, Render, Rgba, SharedString, StatefulInteractiveElement, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions, actions, div, hsla,
-    point, prelude::*, px, size,
+    WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowDecorations, WindowOptions,
+    actions, div, hsla, point, prelude::*, px, size, svg,
 };
 
 actions!(frame_gpui_ce, [Quit]);
@@ -25,6 +29,7 @@ struct FrameRoot {
     active_view: ActiveView,
     file_queue: FileQueue,
     is_processing: bool,
+    is_settings_open: bool,
 }
 
 impl FrameRoot {
@@ -33,6 +38,7 @@ impl FrameRoot {
             active_view: ActiveView::Workspace,
             file_queue: FileQueue::new(),
             is_processing: false,
+            is_settings_open: false,
         }
     }
 
@@ -57,67 +63,222 @@ impl Render for FrameRoot {
             .overflow_hidden()
             .bg(color(theme::BACKGROUND))
             .text_color(color(theme::FOREGROUND))
-            .child(titlebar(state))
+            .child(titlebar(state, cx))
             .child(content)
     }
 }
 
-fn titlebar(state: FrameAppState) -> impl IntoElement {
+fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> impl IntoElement {
     div()
-        .h(px(PANEL_HEADER_HEIGHT))
+        .h(px(TITLEBAR_HEIGHT))
         .w_full()
         .flex()
         .items_center()
         .justify_between()
         .px_4()
-        .text_xs()
+        .pt(px(TITLEBAR_TOP_PADDING))
+        .window_control_area(WindowControlArea::Drag)
+        .text_size(px(theme::TEXT_LABEL_SIZE))
         .child(
             div()
                 .flex()
                 .items_center()
+                .mt_2()
                 .gap_6()
-                .child("FRAME")
-                .child(titlebar_segment(
-                    "WORKSPACE",
-                    state.active_view == ActiveView::Workspace,
-                ))
-                .child(titlebar_segment(
-                    "LOGS",
-                    state.active_view == ActiveView::Logs,
-                ))
-                .child(format!(
-                    "STORAGE {}",
-                    format_total_size(state.total_size_bytes)
-                ))
-                .child(format!("ITEMS {}", state.file_count)),
+                .child(macos_window_controls(cx))
+                .child(frame_logo())
+                .child(titlebar_divider())
+                .child(titlebar_navigation(state.active_view, cx))
+                .child(titlebar_divider())
+                .child(titlebar_stats(state)),
         )
         .child(
             div()
                 .flex()
                 .items_center()
+                .mt_2()
                 .gap_2()
-                .child(action_button("SETTINGS", true))
-                .child(action_button("ADD SOURCE", true))
+                .child(
+                    action_button(assets::ICON_SETTINGS, None, ButtonVariant::Secondary, true)
+                        .id("titlebar-settings")
+                        .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                            root.is_settings_open = !root.is_settings_open;
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    action_button(
+                        assets::ICON_PLUS,
+                        Some("ADD SOURCE"),
+                        ButtonVariant::Secondary,
+                        true,
+                    )
+                    .id("titlebar-add-source")
+                    .on_click(cx.listener(|_, _: &ClickEvent, _window, cx| {
+                        cx.stop_propagation();
+                    })),
+                )
                 .child(action_button(
-                    if state.is_processing {
+                    assets::ICON_PLAY,
+                    Some(if state.is_processing {
                         "PROCESSING"
                     } else {
                         "START"
-                    },
+                    }),
+                    ButtonVariant::Default,
                     state.can_start_conversion(),
                 )),
         )
 }
 
-fn titlebar_segment(label: &'static str, selected: bool) -> impl IntoElement {
+fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
     div()
-        .h_6()
         .flex()
         .items_center()
+        .mr_2()
+        .child(
+            traffic_light("#ff5f56", "#e0443e")
+                .id("titlebar-close")
+                .window_control_area(WindowControlArea::Close)
+                .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    window.remove_window();
+                })),
+        )
+        .child(
+            traffic_light("#ffbd2e", "#dea123")
+                .id("titlebar-minimize")
+                .window_control_area(WindowControlArea::Min)
+                .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    window.minimize_window();
+                })),
+        )
+        .child(
+            traffic_light("#27c93f", "#1aab29")
+                .id("titlebar-zoom")
+                .window_control_area(WindowControlArea::Max)
+                .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    window.zoom_window();
+                })),
+        )
+}
+
+fn traffic_light(fill: &'static str, border: &'static str) -> gpui::Div {
+    div()
+        .w(px(TITLEBAR_TRAFFIC_LIGHT_SIZE))
+        .h(px(TITLEBAR_TRAFFIC_LIGHT_SIZE))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .cursor_pointer()
+        .child(
+            div()
+                .w(px(12.0))
+                .h(px(12.0))
+                .rounded_full()
+                .bg(parse_hex(fill))
+                .border_1()
+                .border_color(parse_hex(border)),
+        )
+}
+
+fn frame_logo() -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .px_2()
+        .text_color(color(theme::FRAME_GRAY_600))
+        .child(
+            svg()
+                .path(assets::ICON_FRAME)
+                .w(px(TITLEBAR_LOGO_SIZE))
+                .h(px(TITLEBAR_LOGO_SIZE)),
+        )
+}
+
+fn titlebar_divider() -> gpui::Div {
+    div()
+        .h(px(TITLEBAR_DIVIDER_HEIGHT))
+        .w(px(1.0))
+        .bg(color(theme::FRAME_GRAY_100))
+}
+
+fn titlebar_navigation(active_view: ActiveView, cx: &mut Context<FrameRoot>) -> gpui::Div {
+    div()
+        .h(px(TITLEBAR_SEGMENT_HEIGHT))
+        .flex()
+        .items_center()
+        .gap_1()
         .rounded(px(theme::RADIUS_MD))
-        .px_3()
+        .bg(color(theme::FRAME_GRAY_100))
+        .px(px(3.0))
+        .py(px(2.0))
+        .shadow(input_highlight_shadows())
+        .child(titlebar_segment(
+            assets::ICON_LAYOUT_LIST,
+            "WORKSPACE",
+            ActiveView::Workspace,
+            active_view == ActiveView::Workspace,
+            cx,
+        ))
+        .child(titlebar_segment(
+            assets::ICON_TERMINAL,
+            "LOGS",
+            ActiveView::Logs,
+            active_view == ActiveView::Logs,
+            cx,
+        ))
+}
+
+fn titlebar_stats(state: FrameAppState) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .gap_4()
+        .text_color(color(theme::FRAME_GRAY_600))
+        .child(titlebar_stat(
+            assets::ICON_HARD_DRIVE,
+            format!("STORAGE {}", format_total_size(state.total_size_bytes)),
+        ))
+        .child(titlebar_stat(
+            assets::ICON_FILE_VIDEO,
+            format!("ITEMS {}", state.file_count),
+        ))
+}
+
+fn titlebar_stat(icon: &'static str, label: String) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
+        .child(label)
+}
+
+fn titlebar_segment(
+    icon: &'static str,
+    label: &'static str,
+    view: ActiveView,
+    selected: bool,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    div()
+        .h(px(TITLEBAR_NAV_BUTTON_HEIGHT))
+        .flex()
+        .items_center()
+        .gap_2()
+        .rounded(px(theme::RADIUS_SM))
+        .id(match view {
+            ActiveView::Workspace => "titlebar-workspace",
+            ActiveView::Logs => "titlebar-logs",
+        })
+        .px_2()
         .bg(if selected {
-            color(theme::FRAME_GRAY_100)
+            color(theme::FRAME_GRAY_400)
         } else {
             color(theme::TRANSPARENT)
         })
@@ -126,27 +287,117 @@ fn titlebar_segment(label: &'static str, selected: bool) -> impl IntoElement {
         } else {
             color(theme::FRAME_GRAY_600)
         })
+        .when(selected, |this| this.shadow(button_highlight_shadows()))
+        .hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
+        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+            if root.active_view != view {
+                root.active_view = view;
+                cx.notify();
+            }
+            cx.stop_propagation();
+        }))
+        .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
         .child(label)
 }
 
-fn action_button(label: &'static str, enabled: bool) -> impl IntoElement {
-    div()
-        .h_7()
+#[derive(Clone, Copy)]
+enum ButtonVariant {
+    Default,
+    Secondary,
+}
+
+fn action_button(
+    icon: &'static str,
+    label: Option<&'static str>,
+    variant: ButtonVariant,
+    enabled: bool,
+) -> gpui::Div {
+    let is_icon_only = label.is_none();
+    let background = match (variant, enabled) {
+        (ButtonVariant::Default, true) => theme::FRAME_GRAY_400,
+        (ButtonVariant::Default, false) => theme::FRAME_GRAY_400.with_alpha(0.10),
+        (ButtonVariant::Secondary, true | false) => theme::FRAME_GRAY_100,
+    };
+
+    let button = div()
+        .h(px(TITLEBAR_BUTTON_HEIGHT))
         .flex()
         .items_center()
-        .rounded(px(theme::RADIUS_MD))
-        .px_3()
-        .bg(if enabled {
-            color(theme::FRAME_GRAY_100)
-        } else {
-            color(theme::TRANSPARENT)
-        })
+        .justify_center()
+        .gap_2()
+        .rounded(px(theme::RADIUS_SM))
+        .bg(color(background))
+        .shadow(button_highlight_shadows())
         .text_color(if enabled {
             color(theme::FOREGROUND)
         } else {
-            color(theme::FRAME_GRAY_600)
+            color(theme::FOREGROUND.with_alpha(0.50))
         })
-        .child(label)
+        .when(enabled, |this| {
+            this.hover(|style| style.bg(color(theme::FRAME_GRAY_200)).cursor_pointer())
+        });
+
+    if is_icon_only {
+        button
+            .w(px(TITLEBAR_ICON_BUTTON_SIZE))
+            .child(icon_svg(icon, TITLEBAR_ACTION_ICON_SIZE))
+    } else {
+        button
+            .px(px(10.0))
+            .child(icon_svg(icon, TITLEBAR_ICON_SIZE))
+            .child(label.unwrap_or_default())
+    }
+}
+
+fn icon_svg(path: &'static str, size: f32) -> impl IntoElement {
+    svg().path(path).w(px(size)).h(px(size))
+}
+
+fn parse_hex(hex: &str) -> Rgba {
+    let hex = hex.trim_start_matches('#');
+    let red = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+    let green = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+    let blue = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+
+    color(theme::RgbaToken::from_rgb(red, green, blue))
+}
+
+fn input_highlight_shadows() -> Vec<BoxShadow> {
+    vec![
+        BoxShadow {
+            color: hsla(0.0, 0.0, 0.0, 0.20),
+            offset: point(px(0.0), px(0.5)),
+            blur_radius: px(0.0),
+            spread_radius: px(0.0),
+            inset: true,
+        },
+        BoxShadow {
+            color: color(theme::FRAME_GRAY_400).into(),
+            offset: point(px(0.0), px(-0.5)),
+            blur_radius: px(0.0),
+            spread_radius: px(0.0),
+            inset: true,
+        },
+    ]
+}
+
+fn button_highlight_shadows() -> Vec<BoxShadow> {
+    vec![
+        BoxShadow {
+            color: color(theme::FRAME_GRAY_400).into(),
+            offset: point(px(0.0), px(0.5)),
+            blur_radius: px(0.0),
+            spread_radius: px(0.0),
+            inset: true,
+        },
+        BoxShadow {
+            color: color(theme::FRAME_GRAY_200).into(),
+            offset: point(px(0.0), px(0.0)),
+            blur_radius: px(0.0),
+            spread_radius: px(0.5),
+            inset: true,
+        },
+    ]
 }
 
 fn workspace_view(file_queue: &FileQueue, cx: &mut Context<FrameRoot>) -> gpui::Div {
@@ -617,25 +868,28 @@ fn init_app(cx: &mut App, name: impl Into<SharedString>) {
 }
 
 fn main() {
-    gpui_platform::application().run(|cx| {
-        let bounds = Bounds::centered(None, size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Frame".into()),
-                    appears_transparent: true,
-                    traffic_light_position: None,
-                }),
-                window_min_size: Some(size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT))),
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            },
-            |_, cx| cx.new(|_| FrameRoot::new()),
-        )
-        .expect("failed to open Frame GPUI window");
+    gpui_platform::application()
+        .with_assets(FrameAssets)
+        .run(|cx| {
+            let bounds =
+                Bounds::centered(None, size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT)), cx);
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    titlebar: Some(TitlebarOptions {
+                        title: Some("Frame".into()),
+                        appears_transparent: true,
+                        traffic_light_position: None,
+                    }),
+                    window_min_size: Some(size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT))),
+                    window_background: WindowBackgroundAppearance::Opaque,
+                    window_decorations: Some(WindowDecorations::Client),
+                    ..Default::default()
+                },
+                |_, cx| cx.new(|_| FrameRoot::new()),
+            )
+            .expect("failed to open Frame GPUI window");
 
-        init_app(cx, "Frame");
-    });
+            init_app(cx, "Frame");
+        });
 }

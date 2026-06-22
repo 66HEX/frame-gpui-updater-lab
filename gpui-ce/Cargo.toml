@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 gpui = { package = "gpui", git = "https://github.com/gpui-ce/gpui-ce" }
-gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce" }
+gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce", features = ["font-kit"] }
 
 [lints.rust]
 future-incompatible = "warn"
