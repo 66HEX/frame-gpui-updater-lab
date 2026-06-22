@@ -1,221 +1,23 @@
-use std::path::Path;
-
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::sync::mpsc;
 
-use crate::conversion::args::{add_metadata_flags, build_output_path};
-use crate::conversion::codec::{
-    add_audio_codec_args, add_fps_args, add_subtitle_codec_args, add_video_codec_args,
+use frame_core::events::ConversionEvent;
+pub use frame_core::upscale::{
+    build_upscale_encode_args, compute_upscale_threads, resolve_upscale_mode,
 };
+
+use frame_core::upscale::{ceil_to_u32_saturating, usize_to_u32_saturating};
+
+use crate::conversion::args::build_output_path;
 use crate::conversion::error::ConversionError;
-use crate::conversion::filters::{build_audio_filters, build_video_filters};
+use crate::conversion::events::emit_conversion_event;
+use crate::conversion::filters::build_video_filters;
 use crate::conversion::manager::ManagerMessage;
-use crate::conversion::media_rules::{
-    container_supports_audio, container_supports_subtitles, is_image_container,
-};
-use crate::conversion::types::{
-    CompletedPayload, ConversionConfig, ConversionTask, LogPayload, MetadataMode, ProgressPayload,
-    StartedPayload,
-};
+use crate::conversion::types::ConversionTask;
 use crate::conversion::utils::{FRAME_REGEX, parse_time, sanitize_external_tool_path};
-
-pub fn build_upscale_encode_args(
-    output_frames_dir: &Path,
-    source_file_path: &str,
-    output_path: &str,
-    source_fps: f64,
-    config: &ConversionConfig,
-    source_pixel_format: Option<String>,
-) -> Vec<String> {
-    let is_image_output = is_image_container(&config.container);
-    let supports_audio = container_supports_audio(&config.container);
-    let supports_subtitles = container_supports_subtitles(&config.container);
-    let has_burn_subtitles = config
-        .subtitle_burn_path
-        .as_ref()
-        .is_some_and(|path| !path.trim().is_empty());
-
-    let mut enc_args = vec![
-        "-framerate".to_string(),
-        source_fps.to_string(),
-        "-start_number".to_string(),
-        "1".to_string(),
-        "-i".to_string(),
-        output_frames_dir
-            .join("frame_%08d.png")
-            .to_string_lossy()
-            .to_string(),
-    ];
-
-    if let Some(start) = &config.start_time
-        && !start.is_empty()
-    {
-        enc_args.push("-ss".to_string());
-        enc_args.push(start.clone());
-    }
-
-    enc_args.push("-i".to_string());
-    enc_args.push(source_file_path.to_string());
-
-    match config.metadata.mode {
-        MetadataMode::Clean => {
-            enc_args.push("-map_metadata".to_string());
-            enc_args.push("-1".to_string());
-        }
-        MetadataMode::Replace => {
-            enc_args.push("-map_metadata".to_string());
-            enc_args.push("-1".to_string());
-            add_metadata_flags(&mut enc_args, &config.metadata);
-        }
-        MetadataMode::Preserve => {
-            enc_args.push("-map_metadata".to_string());
-            enc_args.push("1".to_string());
-            add_metadata_flags(&mut enc_args, &config.metadata);
-        }
-    }
-
-    enc_args.push("-map".to_string());
-    enc_args.push("0:v:0".to_string());
-
-    if supports_audio {
-        if config.selected_audio_tracks.is_empty() {
-            enc_args.push("-map".to_string());
-            enc_args.push("1:a?".to_string());
-        } else {
-            for track_index in &config.selected_audio_tracks {
-                enc_args.push("-map".to_string());
-                enc_args.push(format!("1:{track_index}"));
-            }
-        }
-    }
-
-    if supports_subtitles {
-        if !config.selected_subtitle_tracks.is_empty() {
-            for track_index in &config.selected_subtitle_tracks {
-                enc_args.push("-map".to_string());
-                enc_args.push(format!("1:{track_index}"));
-            }
-        } else if !has_burn_subtitles {
-            enc_args.push("-map".to_string());
-            enc_args.push("1:s?".to_string());
-        }
-    }
-
-    add_video_codec_args(&mut enc_args, config);
-
-    if supports_audio {
-        add_audio_codec_args(&mut enc_args, config);
-
-        let audio_filters = build_audio_filters(config);
-        if !audio_filters.is_empty() {
-            enc_args.push("-af".to_string());
-            enc_args.push(audio_filters.join(","));
-        }
-    }
-
-    if supports_subtitles && (!config.selected_subtitle_tracks.is_empty() || !has_burn_subtitles) {
-        add_subtitle_codec_args(&mut enc_args, config);
-    }
-
-    if is_image_output {
-        let configured_pixel_format = config.pixel_format.trim();
-        if !configured_pixel_format.is_empty() && configured_pixel_format != "auto" {
-            enc_args.push("-pix_fmt".to_string());
-            enc_args.push(configured_pixel_format.to_string());
-        }
-
-        enc_args.push("-frames:v".to_string());
-        enc_args.push("1".to_string());
-        enc_args.push("-update".to_string());
-        enc_args.push("1".to_string());
-    } else {
-        add_fps_args(&mut enc_args, config);
-
-        // Pixel format handling: user override wins, otherwise preserve high bit-depth or default to yuv420p
-        enc_args.push("-pix_fmt".to_string());
-        let configured_pixel_format = config.pixel_format.trim();
-        if !configured_pixel_format.is_empty() && configured_pixel_format != "auto" {
-            enc_args.push(configured_pixel_format.to_string());
-        } else if let Some(pf) = source_pixel_format {
-            let normalized = pf.trim().to_string();
-            if normalized.contains("10") || normalized.contains("12") {
-                enc_args.push(normalized);
-            } else {
-                enc_args.push("yuv420p".to_string());
-            }
-        } else {
-            enc_args.push("yuv420p".to_string());
-        }
-
-        enc_args.push("-shortest".to_string());
-    }
-    enc_args.push("-y".to_string());
-    enc_args.push(output_path.to_string());
-
-    enc_args
-}
-
-pub fn resolve_upscale_mode(mode: &str) -> Result<(&'static str, &'static str), ConversionError> {
-    match mode {
-        "esrgan-2x" => Ok(("2", "realesr-animevideov3-x2")),
-        "esrgan-4x" => Ok(("4", "realesr-animevideov3-x4")),
-        _ => Err(ConversionError::InvalidInput(format!(
-            "Invalid upscale mode: {mode}"
-        ))),
-    }
-}
-
-pub fn compute_upscale_threads(source_width: u32, source_height: u32, scale: u32) -> String {
-    let output_pixels = (u64::from(source_width) * u64::from(scale))
-        * (u64::from(source_height) * u64::from(scale));
-
-    // proc: concurrent GPU inference frames — limited by VRAM
-    // > 4K output (~8.3M px): ~500MB+ per frame → single concurrent frame
-    // > 1080p output (~2M px): moderate pressure → 2 concurrent frames
-    // ≤ 1080p output: lightweight, pipeline benefits from concurrency → 4
-    let proc = if output_pixels > 8_294_400 {
-        1
-    } else if output_pixels > 2_073_600 {
-        2
-    } else {
-        4
-    };
-
-    // load/save: I/O threads — limited by CPU cores
-    let cpus = std::thread::available_parallelism()
-        .map(|n| u32::try_from(n.get()).unwrap_or(u32::MAX))
-        .unwrap_or(4);
-    let io = cpus.div_ceil(2).clamp(1, 4);
-
-    format!("{io}:{proc}:{io}")
-}
-
-fn ceil_to_u32_saturating(value: f64) -> u32 {
-    if !value.is_finite() || value <= 0.0 {
-        return 0;
-    }
-    if value >= f64::from(u32::MAX) {
-        return u32::MAX;
-    }
-
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "value is finite, non-negative and bounded to u32 range"
-    )]
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "negative values are returned early before the cast"
-    )]
-    let converted = value.ceil() as u32;
-    converted
-}
-
-fn usize_to_u32_saturating(value: usize) -> u32 {
-    u32::try_from(value).unwrap_or(u32::MAX)
-}
 
 pub async fn validate_upscale_runtime(app: &AppHandle, mode: &str) -> Result<(), ConversionError> {
     let (_, model_name) = resolve_upscale_mode(mode)?;
@@ -339,20 +141,9 @@ pub async fn run_upscale_worker(
     let app_clone = app.clone();
     let id_clone = task.id.clone();
 
-    let _ = app_clone.emit(
-        "conversion-started",
-        StartedPayload {
-            id: id_clone.clone(),
-        },
-    );
+    emit_conversion_event(&app_clone, ConversionEvent::started(id_clone.clone()));
 
-    let _ = app_clone.emit(
-        "conversion-progress",
-        ProgressPayload {
-            id: id_clone.clone(),
-            progress: 0.0,
-        },
-    );
+    emit_conversion_event(&app_clone, ConversionEvent::progress(id_clone.clone(), 0.0));
 
     let mut dec_args = Vec::new();
 
@@ -437,12 +228,9 @@ pub async fn run_upscale_worker(
         match event {
             CommandEvent::Stderr(ref line_bytes) => {
                 let line = String::from_utf8_lossy(line_bytes);
-                let _ = app_clone.emit(
-                    "conversion-log",
-                    LogPayload {
-                        id: id_clone.clone(),
-                        line: format!("[DECODE] {}", line.trim()),
-                    },
+                emit_conversion_event(
+                    &app_clone,
+                    ConversionEvent::log(id_clone.clone(), format!("[DECODE] {}", line.trim())),
                 );
 
                 if total_frames > 0
@@ -452,12 +240,9 @@ pub async fn run_upscale_worker(
                 {
                     let decode_progress =
                         (f64::from(current_frame) / f64::from(total_frames)) * 5.0;
-                    let _ = app_clone.emit(
-                        "conversion-progress",
-                        ProgressPayload {
-                            id: id_clone.clone(),
-                            progress: decode_progress.min(5.0),
-                        },
+                    emit_conversion_event(
+                        &app_clone,
+                        ConversionEvent::progress(id_clone.clone(), decode_progress.min(5.0)),
                     );
                 }
             }
@@ -550,12 +335,9 @@ pub async fn run_upscale_worker(
                 && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit());
 
             if !is_percentage_line && !trimmed.is_empty() {
-                let _ = app_clone.emit(
-                    "conversion-log",
-                    LogPayload {
-                        id: id_clone.clone(),
-                        line: format!("[UPSCALE] {trimmed}"),
-                    },
+                emit_conversion_event(
+                    &app_clone,
+                    ConversionEvent::log(id_clone.clone(), format!("[UPSCALE] {trimmed}")),
                 );
             }
 
@@ -570,12 +352,9 @@ pub async fn run_upscale_worker(
 
                 if progress > last_upscale_progress {
                     last_upscale_progress = progress;
-                    let _ = app_clone.emit(
-                        "conversion-progress",
-                        ProgressPayload {
-                            id: id_clone.clone(),
-                            progress: progress.min(90.0),
-                        },
+                    emit_conversion_event(
+                        &app_clone,
+                        ConversionEvent::progress(id_clone.clone(), progress.min(90.0)),
                     );
                 }
             }
@@ -620,12 +399,9 @@ pub async fn run_upscale_worker(
         match event {
             CommandEvent::Stderr(ref line_bytes) => {
                 let line = String::from_utf8_lossy(line_bytes);
-                let _ = app_clone.emit(
-                    "conversion-log",
-                    LogPayload {
-                        id: id_clone.clone(),
-                        line: format!("[ENCODE] {}", line.trim()),
-                    },
+                emit_conversion_event(
+                    &app_clone,
+                    ConversionEvent::log(id_clone.clone(), format!("[ENCODE] {}", line.trim())),
                 );
 
                 if total_frames > 0
@@ -635,24 +411,18 @@ pub async fn run_upscale_worker(
                 {
                     let encode_progress =
                         (f64::from(current_frame) / f64::from(total_frames)).mul_add(10.0, 90.0);
-                    let _ = app_clone.emit(
-                        "conversion-progress",
-                        ProgressPayload {
-                            id: id_clone.clone(),
-                            progress: encode_progress.min(99.0),
-                        },
+                    emit_conversion_event(
+                        &app_clone,
+                        ConversionEvent::progress(id_clone.clone(), encode_progress.min(99.0)),
                     );
                 }
             }
             CommandEvent::Terminated(payload) => {
                 let _ = std::fs::remove_dir_all(&temp_dir);
                 if payload.code == Some(0) {
-                    let _ = app.emit(
-                        "conversion-completed",
-                        CompletedPayload {
-                            id: task.id.clone(),
-                            output_path,
-                        },
+                    emit_conversion_event(
+                        &app,
+                        ConversionEvent::completed(task.id.clone(), output_path),
                     );
                     return Ok(());
                 }

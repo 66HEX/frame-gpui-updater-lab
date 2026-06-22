@@ -170,6 +170,11 @@ impl FileQueue {
     }
 
     #[must_use]
+    pub fn file_by_id(&self, id: &str) -> Option<&FileItem> {
+        self.files.iter().find(|file| file.id == id)
+    }
+
+    #[must_use]
     pub fn selected_file_locked(&self) -> bool {
         self.selected_file().is_some_and(FileItem::locks_settings)
     }
@@ -308,10 +313,32 @@ impl FileQueue {
         true
     }
 
-    pub fn update_status(&mut self, id: &str, status: FileStatus, progress_percent: u8) {
+    pub fn update_status(&mut self, id: &str, status: FileStatus, progress_percent: u8) -> bool {
         if let Some(file) = self.files.iter_mut().find(|file| file.id == id) {
             file.status = status;
             file.progress_percent = progress_percent.min(100);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update_error(&mut self, id: &str, error: impl Into<String>) -> bool {
+        if let Some(file) = self.files.iter_mut().find(|file| file.id == id) {
+            file.status = FileStatus::Error;
+            file.conversion_error = Some(error.into());
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn clear_error(&mut self, id: &str) -> bool {
+        if let Some(file) = self.files.iter_mut().find(|file| file.id == id) {
+            file.conversion_error = None;
+            true
+        } else {
+            false
         }
     }
 }
@@ -763,6 +790,47 @@ mod tests {
             assert_eq!(
                 queue.selected_file().map(|file| file.progress_percent),
                 Some(100)
+            );
+        }
+
+        #[test]
+        fn file_by_id_returns_matching_file_without_changing_selection() {
+            let mut queue = FileQueue::new();
+            queue.add_file(sample_file("first", "/tmp/one.mp4", 10));
+            queue.add_file(sample_file("second", "/tmp/two.mp4", 10));
+
+            assert_eq!(
+                queue.file_by_id("second").map(|file| file.name.as_str()),
+                Some("two.mp4")
+            );
+            assert_eq!(queue.selected_file_id(), Some("first"));
+        }
+
+        #[test]
+        fn update_error_stores_conversion_error_message() {
+            let mut queue = FileQueue::new();
+            queue.add_file(sample_file("first", "/tmp/one.mp4", 10));
+
+            assert!(queue.update_error("first", "ffmpeg failed"));
+
+            let file = queue.file_by_id("first").expect("file should exist");
+            assert_eq!(file.status, FileStatus::Error);
+            assert_eq!(file.conversion_error.as_deref(), Some("ffmpeg failed"));
+        }
+
+        #[test]
+        fn clear_error_removes_previous_conversion_error() {
+            let mut queue = FileQueue::new();
+            queue.add_file(sample_file("first", "/tmp/one.mp4", 10));
+            queue.update_error("first", "ffmpeg failed");
+
+            assert!(queue.clear_error("first"));
+
+            assert_eq!(
+                queue
+                    .file_by_id("first")
+                    .and_then(|file| file.conversion_error.as_deref()),
+                None
             );
         }
 

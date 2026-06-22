@@ -4,10 +4,10 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use sysinfo::{Pid, ProcessesToUpdate, System};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::mpsc;
 
-use crate::conversion::types::{CancelledPayload, ErrorPayload, LogPayload};
+use frame_core::events::ConversionEvent;
 
 #[cfg(windows)]
 use windows::{
@@ -22,6 +22,7 @@ use windows::{
 };
 
 use crate::conversion::error::ConversionError;
+use crate::conversion::events::emit_conversion_event;
 use crate::conversion::types::{ConversionTask, DEFAULT_MAX_CONCURRENCY};
 use crate::conversion::worker::run_ffmpeg_worker;
 
@@ -168,30 +169,20 @@ impl ConversionManager {
                         };
 
                         if was_cancelled {
-                            let _ = app.emit(
-                                "conversion-log",
-                                LogPayload {
-                                    id: id.clone(),
-                                    line: "[INFO] Task cancelled".to_string(),
-                                },
+                            emit_conversion_event(
+                                &app,
+                                ConversionEvent::log(id.clone(), "[INFO] Task cancelled"),
                             );
-                            let _ = app
-                                .emit("conversion-cancelled", CancelledPayload { id: id.clone() });
+                            emit_conversion_event(&app, ConversionEvent::cancelled(id.clone()));
                         } else {
                             eprintln!("Task {id} failed: {err}");
-                            let _ = app.emit(
-                                "conversion-log",
-                                LogPayload {
-                                    id: id.clone(),
-                                    line: format!("[ERROR] {err}"),
-                                },
+                            emit_conversion_event(
+                                &app,
+                                ConversionEvent::log(id.clone(), format!("[ERROR] {err}")),
                             );
-                            let _ = app.emit(
-                                "conversion-error",
-                                ErrorPayload {
-                                    id: id.clone(),
-                                    error: err.to_string(),
-                                },
+                            emit_conversion_event(
+                                &app,
+                                ConversionEvent::error(id.clone(), err.to_string()),
                             );
                         }
 

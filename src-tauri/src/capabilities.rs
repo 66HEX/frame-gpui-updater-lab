@@ -1,23 +1,7 @@
-use regex::Regex;
+use frame_core::capabilities::{self, AvailableEncoders};
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, command};
 use tauri_plugin_shell::ShellExt;
-
-#[derive(serde::Serialize, Clone, Debug)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "encoder availability is represented as explicit frontend feature flags"
-)]
-pub struct AvailableEncoders {
-    pub h264_videotoolbox: bool,
-    pub h264_nvenc: bool,
-    pub hevc_videotoolbox: bool,
-    pub hevc_nvenc: bool,
-    pub av1_nvenc: bool,
-    pub ml_upscale: bool,
-    pub libfdk_aac: bool,
-    pub libmp3lame: bool,
-}
 
 fn has_upscale_models(app: &AppHandle) -> bool {
     let Ok(models_path) = app
@@ -27,14 +11,9 @@ fn has_upscale_models(app: &AppHandle) -> bool {
         return false;
     };
 
-    [
-        "realesr-animevideov3-x2.param",
-        "realesr-animevideov3-x2.bin",
-        "realesr-animevideov3-x4.param",
-        "realesr-animevideov3-x4.bin",
-    ]
-    .iter()
-    .all(|name| models_path.join(name).is_file())
+    capabilities::required_upscale_model_files()
+        .iter()
+        .all(|name| models_path.join(name).is_file())
 }
 
 #[command]
@@ -43,7 +22,7 @@ pub async fn get_available_encoders(app: AppHandle) -> Result<AvailableEncoders,
         .shell()
         .sidecar("ffmpeg")
         .map_err(|e| e.to_string())?
-        .args(["-encoders"])
+        .args(capabilities::ffmpeg_encoder_list_args())
         .output()
         .await
         .map_err(|e| e.to_string())?;
@@ -53,23 +32,8 @@ pub async fn get_available_encoders(app: AppHandle) -> Result<AvailableEncoders,
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-
-    let has_encoder = |name: &str| -> bool {
-        let pattern = format!(r"(?m)^\s*[A-Z.]+\s+{}\s+", regex::escape(name));
-        Regex::new(&pattern).map_or_else(|_| stdout.contains(name), |re| re.is_match(&stdout))
-    };
-
     let has_upscaler_sidecar = app.shell().sidecar("realesrgan-ncnn-vulkan").is_ok();
     let ml_upscale = has_upscaler_sidecar && has_upscale_models(&app);
 
-    Ok(AvailableEncoders {
-        h264_videotoolbox: has_encoder("h264_videotoolbox"),
-        h264_nvenc: has_encoder("h264_nvenc"),
-        hevc_videotoolbox: has_encoder("hevc_videotoolbox"),
-        hevc_nvenc: has_encoder("hevc_nvenc"),
-        av1_nvenc: has_encoder("av1_nvenc"),
-        ml_upscale,
-        libfdk_aac: has_encoder("libfdk_aac"),
-        libmp3lame: has_encoder("libmp3lame"),
-    })
+    Ok(capabilities::parse_available_encoders(&stdout, ml_upscale))
 }

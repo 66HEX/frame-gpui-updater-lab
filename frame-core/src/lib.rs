@@ -1,10 +1,14 @@
 //! Shared backend services for the Frame GPUI migration.
 
 pub mod args;
+pub mod capabilities;
 pub mod codec;
 pub mod error;
+pub mod events;
 pub mod filters;
+pub mod fonts;
 pub mod media_rules;
 pub mod probe;
 pub mod types;
+pub mod upscale;
 pub mod utils;

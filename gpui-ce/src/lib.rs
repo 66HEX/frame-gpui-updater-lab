@@ -1,6 +1,7 @@
 //! Shared state and layout contracts for the native GPUI-CE rewrite of Frame.
 
 pub mod assets;
+pub mod conversion_events;
 pub mod file_queue;
 pub mod settings;
 pub mod theme;
@@ -39,6 +40,27 @@ pub const SETTINGS_CONTROL_HEIGHT: f32 = 30.0;
 pub enum ActiveView {
     Workspace,
     Logs,
+}
+
+#[must_use]
+pub fn active_view_from_env_value(value: Option<&str>) -> ActiveView {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("logs") => ActiveView::Logs,
+        _ => ActiveView::Workspace,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VisualFixture {
+    LogsActive,
+}
+
+#[must_use]
+pub fn visual_fixture_from_env_value(value: Option<&str>) -> Option<VisualFixture> {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("logs-active") => Some(VisualFixture::LogsActive),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -139,6 +161,43 @@ mod tests {
             let state = FrameAppState::from_file_queue(ActiveView::Workspace, false, &queue);
 
             assert_eq!(state.file_count, 1);
+        }
+    }
+
+    mod active_view_env {
+        use super::*;
+
+        #[test]
+        fn logs_value_opens_logs_view_for_visual_checks() {
+            assert_eq!(active_view_from_env_value(Some("logs")), ActiveView::Logs);
+            assert_eq!(active_view_from_env_value(Some(" LOGS ")), ActiveView::Logs);
+        }
+
+        #[test]
+        fn missing_or_unknown_value_keeps_workspace_default() {
+            assert_eq!(active_view_from_env_value(None), ActiveView::Workspace);
+            assert_eq!(
+                active_view_from_env_value(Some("workspace")),
+                ActiveView::Workspace
+            );
+        }
+    }
+
+    mod visual_fixture_env {
+        use super::*;
+
+        #[test]
+        fn logs_active_value_enables_logs_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("logs-active")),
+                Some(VisualFixture::LogsActive)
+            );
+        }
+
+        #[test]
+        fn missing_or_unknown_value_disables_visual_fixtures() {
+            assert_eq!(visual_fixture_from_env_value(None), None);
+            assert_eq!(visual_fixture_from_env_value(Some("workspace")), None);
         }
     }
 

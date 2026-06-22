@@ -233,35 +233,35 @@ pub enum MetadataMode {
     Replace,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgressPayload {
     pub id: String,
     pub progress: f64,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct StartedPayload {
     pub id: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CancelledPayload {
     pub id: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CompletedPayload {
     pub id: String,
     pub output_path: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ErrorPayload {
     pub id: String,
     pub error: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct LogPayload {
     pub id: String,
     pub line: String,

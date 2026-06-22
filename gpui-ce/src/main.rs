@@ -1,3 +1,4 @@
+use frame_core::events::ConversionEvent;
 use frame_gpui_ce::{
     ActiveView, CONTENT_PADDING, FILE_LIST_ROW_SPAN, FILE_ROW_HEIGHT, FrameAppState,
     LEFT_COLUMN_SPAN, LEFT_GRID_ROWS, PANEL_HEADER_HEIGHT, PREVIEW_ROW_SPAN, RIGHT_COLUMN_SPAN,
@@ -5,11 +6,12 @@ use frame_gpui_ce::{
     SETTINGS_TAB_ICON_SIZE, TITLEBAR_ACTION_ICON_SIZE, TITLEBAR_BUTTON_HEIGHT,
     TITLEBAR_DIVIDER_HEIGHT, TITLEBAR_HEIGHT, TITLEBAR_ICON_BUTTON_SIZE, TITLEBAR_ICON_SIZE,
     TITLEBAR_LOGO_SIZE, TITLEBAR_NAV_BUTTON_HEIGHT, TITLEBAR_SEGMENT_HEIGHT, TITLEBAR_TOP_PADDING,
-    TITLEBAR_TRAFFIC_LIGHT_SIZE, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WORKSPACE_COLUMNS,
-    WORKSPACE_GAP,
+    TITLEBAR_TRAFFIC_LIGHT_SIZE, VisualFixture, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH,
+    WORKSPACE_COLUMNS, WORKSPACE_GAP, active_view_from_env_value,
     assets::{self, FrameAssets},
+    conversion_events::{ActiveLogFile, ConversionEventState, LogLine},
     file_queue::{
-        BatchSelectionState, FileItem, FileQueue, FileStateTone, RowActionAvailability,
+        BatchSelectionState, FileItem, FileQueue, FileStateTone, FileStatus, RowActionAvailability,
         format_file_size,
     },
     format_total_size,
@@ -19,13 +21,14 @@ use frame_gpui_ce::{
         output_processing_mode_options, resolve_active_settings_tab, source_info_sections,
         visible_settings_tabs,
     },
-    theme,
+    theme, visual_fixture_from_env_value,
 };
 use gpui::{
     App, Bounds, BoxShadow, ClickEvent, Context, InteractiveElement, IntoElement, KeyBinding, Menu,
-    MenuItem, Render, Rgba, SharedString, StatefulInteractiveElement, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowDecorations, WindowOptions,
-    actions, div, hsla, point, prelude::*, px, size, svg,
+    MenuItem, Render, Rgba, SharedString, StatefulInteractiveElement, TitlebarOptions,
+    UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
+    WindowDecorations, WindowOptions, actions, div, hsla, point, prelude::*, px, size, svg,
+    uniform_list,
 };
 
 actions!(frame_gpui_ce, [Quit]);
@@ -33,10 +36,15 @@ actions!(frame_gpui_ce, [Quit]);
 const FILE_LIST_ACTIONS_WIDTH: f32 = 64.0;
 const FILE_LIST_ACTION_BUTTON_SIZE: f32 = 24.0;
 const FILE_LIST_CHECKBOX_SIZE: f32 = 12.0;
+const LOG_LINE_NUMBER_WIDTH: f32 = 32.0;
+const LOG_LINE_HEIGHT: f32 = 24.0;
 
 struct FrameRoot {
     active_view: ActiveView,
     file_queue: FileQueue,
+    conversion_events: ConversionEventState,
+    logs_scroll_handle: UniformListScrollHandle,
+    last_log_scroll_target: Option<LogScrollTarget>,
     is_processing: bool,
     is_settings_open: bool,
     settings_active_tab: SettingsTab,
@@ -45,22 +53,93 @@ struct FrameRoot {
     output_name: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LogScrollTarget {
+    file_id: String,
+    line_count: usize,
+}
+
 impl FrameRoot {
     fn new() -> Self {
-        Self {
-            active_view: ActiveView::Workspace,
+        let mut root = Self {
+            active_view: active_view_from_env_value(
+                std::env::var("FRAME_GPUI_INITIAL_VIEW").ok().as_deref(),
+            ),
             file_queue: FileQueue::new(),
+            conversion_events: ConversionEventState::new(),
+            logs_scroll_handle: UniformListScrollHandle::new(),
+            last_log_scroll_target: None,
             is_processing: false,
             is_settings_open: false,
             settings_active_tab: SettingsTab::Source,
             conversion_config: ConversionConfig::default(),
             source_metadata: None,
             output_name: String::new(),
+        };
+
+        root.apply_visual_fixture(visual_fixture_from_env_value(
+            std::env::var("FRAME_GPUI_VISUAL_FIXTURE").ok().as_deref(),
+        ));
+        root
+    }
+
+    fn apply_visual_fixture(&mut self, fixture: Option<VisualFixture>) {
+        let Some(VisualFixture::LogsActive) = fixture else {
+            return;
+        };
+
+        self.active_view = ActiveView::Logs;
+        self.file_queue.add_file(FileItem::from_path(
+            "fixture-video",
+            "/tmp/source_render.mov",
+            1_572_864_000,
+        ));
+        self.file_queue
+            .update_status("fixture-video", FileStatus::Converting, 64);
+
+        for line in [
+            "ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers",
+            "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'source_render.mov':",
+            "Stream #0:0: Video: prores (HQ), yuv422p10le, 3840x2160, 24 fps",
+            "Stream mapping:",
+            "frame=  148 fps= 27 q=-0.0 size=   65536kB time=00:00:06.16 bitrate=87145.2kbits/s speed=1.12x",
+            "frame=  296 fps= 28 q=-0.0 size=  131072kB time=00:00:12.33 bitrate=87042.7kbits/s speed=1.14x",
+            "frame=  444 fps= 29 q=-0.0 size=  196608kB time=00:00:18.50 bitrate=87054.9kbits/s speed=1.16x",
+        ] {
+            self.conversion_events.apply_conversion_event(
+                &mut self.file_queue,
+                ConversionEvent::log("fixture-video", line),
+            );
         }
     }
 
     fn app_state(&self) -> FrameAppState {
         FrameAppState::from_file_queue(self.active_view, self.is_processing, &self.file_queue)
+    }
+
+    fn update_log_scroll_target(&mut self) {
+        if self.active_view != ActiveView::Logs {
+            return;
+        }
+
+        let Some(file_id) = self.conversion_events.selected_log_file_id() else {
+            self.last_log_scroll_target = None;
+            return;
+        };
+
+        let target = LogScrollTarget {
+            file_id: file_id.to_string(),
+            line_count: self.conversion_events.logs_for(file_id).len(),
+        };
+        if target.line_count == 0 {
+            self.last_log_scroll_target = Some(target);
+            return;
+        }
+
+        if self.last_log_scroll_target.as_ref() != Some(&target) {
+            self.logs_scroll_handle.scroll_to_bottom();
+            self.last_log_scroll_target = Some(target);
+        }
     }
 }
 
@@ -74,6 +153,9 @@ impl Render for FrameRoot {
             &self.conversion_config,
             source_metadata.as_ref(),
         );
+        self.conversion_events
+            .ensure_selected_log_file(&self.file_queue);
+        self.update_log_scroll_target();
         let content = div().flex_1().p(px(CONTENT_PADDING));
         let content = match state.active_view {
             ActiveView::Workspace => content.child(workspace_view(
@@ -85,7 +167,12 @@ impl Render for FrameRoot {
                 &self.output_name,
                 cx,
             )),
-            ActiveView::Logs => content.child(logs_view()),
+            ActiveView::Logs => content.child(logs_view(
+                &self.file_queue,
+                &self.conversion_events,
+                &self.logs_scroll_handle,
+                cx,
+            )),
         };
 
         div()
@@ -95,6 +182,7 @@ impl Render for FrameRoot {
             .overflow_hidden()
             .bg(color(theme::BACKGROUND))
             .text_color(color(theme::FOREGROUND))
+            .font_family(assets::FRAME_FONT_FAMILY)
             .child(titlebar(state, cx))
             .child(content)
     }
@@ -498,8 +586,195 @@ fn workspace_view(
         )
 }
 
-fn logs_view() -> gpui::Div {
-    panel("LOGS").size_full().items_center().justify_center()
+fn logs_view(
+    queue: &FileQueue,
+    conversion_events: &ConversionEventState,
+    scroll_handle: &UniformListScrollHandle,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
+    let active_files = conversion_events.active_log_files(queue);
+    let selected_id = conversion_events.selected_log_file_id();
+
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .overflow_hidden()
+        .card_surface()
+        .child(logs_tab_strip(&active_files, selected_id, cx))
+        .child(logs_body(
+            conversion_events,
+            selected_id,
+            !active_files.is_empty(),
+            scroll_handle,
+            cx,
+        ))
+}
+
+fn logs_tab_strip(
+    active_files: &[ActiveLogFile],
+    selected_id: Option<&str>,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
+    let mut tabs = div()
+        .size_full()
+        .flex()
+        .items_center()
+        .gap_6()
+        .overflow_hidden()
+        .px_4();
+
+    for file in active_files {
+        tabs = tabs.child(log_tab_button(
+            file,
+            selected_id.is_some_and(|id| id == file.id),
+            cx,
+        ));
+    }
+
+    if active_files.is_empty() {
+        tabs = tabs.child(
+            div()
+                .text_size(px(theme::TEXT_LABEL_SIZE))
+                .text_color(color(theme::FRAME_GRAY_600))
+                .child("No active processes"),
+        );
+    }
+
+    div()
+        .h(px(PANEL_HEADER_HEIGHT))
+        .w_full()
+        .border_b_1()
+        .border_color(color(theme::BACKGROUND))
+        .child(tabs)
+}
+
+fn log_tab_button(
+    file: &ActiveLogFile,
+    selected: bool,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    let file_id = file.id.clone();
+
+    div()
+        .id(element_id("logs-tab", &file.id))
+        .flex_none()
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(if selected {
+            color(theme::FOREGROUND)
+        } else {
+            color(theme::FRAME_GRAY_600)
+        })
+        .hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
+        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+            if root
+                .conversion_events
+                .select_log_file(&root.file_queue, &file_id)
+            {
+                cx.notify();
+            }
+            cx.stop_propagation();
+        }))
+        .child(file.name.clone())
+}
+
+fn logs_body(
+    conversion_events: &ConversionEventState,
+    selected_id: Option<&str>,
+    has_active_files: bool,
+    scroll_handle: &UniformListScrollHandle,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    let body = div()
+        .id("logs-body")
+        .relative()
+        .flex_1()
+        .flex()
+        .flex_col()
+        .overflow_hidden();
+
+    if !has_active_files {
+        return body.child(logs_empty_state("Select a task to view console output"));
+    }
+
+    let Some(selected_id) = selected_id else {
+        return body.child(logs_empty_state("Select a task to view console output"));
+    };
+
+    let line_count = conversion_events.logs_for(selected_id).len();
+    if line_count == 0 {
+        return body.child(logs_empty_state("Process started, waiting for output..."));
+    }
+
+    body.child(log_lines_list(selected_id, line_count, scroll_handle, cx))
+}
+
+fn log_lines_list(
+    selected_id: &str,
+    line_count: usize,
+    scroll_handle: &UniformListScrollHandle,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    let selected_id = selected_id.to_string();
+    let list_id = element_id("logs-line-list", &selected_id);
+
+    uniform_list(
+        list_id,
+        line_count,
+        cx.processor(move |root, range, _window, _cx| {
+            root.conversion_events
+                .log_line_window_for(&selected_id, range)
+                .iter()
+                .map(log_line_row)
+                .collect()
+        }),
+    )
+    .track_scroll(scroll_handle)
+    .size_full()
+    .p(px(2.0))
+    .text_color(color(theme::FOREGROUND))
+    .line_height(px(LOG_LINE_HEIGHT))
+}
+
+fn log_line_row(line: &LogLine) -> gpui::Div {
+    div()
+        .min_h(px(LOG_LINE_HEIGHT))
+        .w_full()
+        .flex()
+        .items_start()
+        .rounded(px(theme::RADIUS_XS))
+        .px_1()
+        .py(px(2.0))
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .hover(|style| style.bg(color(theme::FRAME_GRAY_100)))
+        .child(
+            div()
+                .flex_none()
+                .w(px(LOG_LINE_NUMBER_WIDTH))
+                .mr(px(12.0))
+                .pt(px(0.5))
+                .text_right()
+                .text_color(color(theme::FRAME_GRAY_400))
+                .child(line.index.to_string()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .child(line.text.clone()),
+        )
+}
+
+fn logs_empty_state(message: &'static str) -> gpui::Div {
+    div()
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(color(theme::FRAME_GRAY_600))
+        .child(message)
 }
 
 fn settings_panel(
@@ -1363,6 +1638,7 @@ fn main() {
     gpui_platform::application()
         .with_assets(FrameAssets)
         .run(|cx| {
+            assets::load_frame_fonts(cx).expect("failed to load Frame fonts");
             let bounds =
                 Bounds::centered(None, size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT)), cx);
             cx.open_window(

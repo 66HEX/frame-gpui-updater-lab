@@ -1,14 +1,15 @@
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
 use tokio::sync::mpsc;
 
+use frame_core::events::ConversionEvent;
+
 use crate::conversion::args::{build_ffmpeg_args, build_output_path};
 use crate::conversion::error::ConversionError;
+use crate::conversion::events::emit_conversion_event;
 use crate::conversion::manager::ManagerMessage;
-use crate::conversion::types::{
-    CompletedPayload, ConversionTask, LogPayload, ProgressPayload, StartedPayload,
-};
+use crate::conversion::types::ConversionTask;
 use crate::conversion::upscale::run_upscale_worker;
 use crate::conversion::utils::{DURATION_REGEX, TIME_REGEX, parse_time};
 
@@ -51,15 +52,9 @@ pub async fn run_ffmpeg_worker(
         .send(ManagerMessage::TaskStarted(id.clone(), child.pid()))
         .await;
 
-    let _ = app.emit("conversion-started", StartedPayload { id: id.clone() });
+    emit_conversion_event(&app, ConversionEvent::started(id.clone()));
 
-    let _ = app.emit(
-        "conversion-progress",
-        ProgressPayload {
-            id: id.clone(),
-            progress: 0.0,
-        },
-    );
+    emit_conversion_event(&app, ConversionEvent::progress(id.clone(), 0.0));
 
     let mut exit_code: Option<i32> = None;
     let mut total_duration: Option<f64> = None;
@@ -99,13 +94,7 @@ pub async fn run_ffmpeg_worker(
                         continue;
                     }
 
-                    let _ = app.emit(
-                        "conversion-log",
-                        LogPayload {
-                            id: id.clone(),
-                            line: line.to_string(),
-                        },
-                    );
+                    emit_conversion_event(&app, ConversionEvent::log(id.clone(), line));
 
                     if let Some(caps) = TIME_REGEX.captures(line)
                         && let Some(match_str) = caps.get(1)
@@ -126,12 +115,9 @@ pub async fn run_ffmpeg_worker(
 
                         if duration > 0.0 {
                             let progress = (current_time / duration * 100.0).min(100.0);
-                            let _ = app.emit(
-                                "conversion-progress",
-                                ProgressPayload {
-                                    id: id.clone(),
-                                    progress,
-                                },
+                            emit_conversion_event(
+                                &app,
+                                ConversionEvent::progress(id.clone(), progress),
                             );
                         }
                     }
@@ -145,13 +131,7 @@ pub async fn run_ffmpeg_worker(
     }
 
     if exit_code == Some(0) {
-        let _ = app.emit(
-            "conversion-completed",
-            CompletedPayload {
-                id: id.clone(),
-                output_path,
-            },
-        );
+        emit_conversion_event(&app, ConversionEvent::completed(id.clone(), output_path));
         Ok(())
     } else {
         let err_msg = format!("Process terminated with code {exit_code:?}");
