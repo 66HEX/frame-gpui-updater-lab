@@ -34,7 +34,7 @@ use frame_gpui_ce::{
         ConversionConfig, CropSettings, SettingsTab, SourceInfoSection, SourceKind, SourceMetadata,
         apply_output_container, apply_processing_mode, apply_trim_times, normalize_output_config,
         output_container_options, output_processing_mode_options, resolve_active_settings_tab,
-        source_info_sections, visible_settings_tabs,
+        sanitize_output_name, source_info_sections, visible_settings_tabs,
     },
     source_metadata::{
         MetadataStatus, SourceMetadataEntry, SourceMetadataStore, probe_source_metadata,
@@ -42,24 +42,44 @@ use frame_gpui_ce::{
     theme, visual_fixture_from_env_value,
 };
 use gpui::{
-    App, Bounds, BoxShadow, ClickEvent, Context, DragMoveEvent, ExternalPaths, FocusHandle,
-    FontWeight, InteractiveElement, IntoElement, KeyBinding, KeyDownEvent, Menu, MenuItem,
-    PathPromptOptions, Pixels, Render, Rgba, SharedString, StatefulInteractiveElement,
-    TitlebarOptions, UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowControlArea, WindowDecorations, WindowOptions, actions, div, hsla, point, prelude::*, px,
-    relative, size, svg, uniform_list,
+    App, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, DragMoveEvent, Element, ElementId,
+    ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, FontWeight,
+    GlobalElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, PathPromptOptions,
+    Pixels, Point, Render, Rgba, ShapedLine, SharedString, StatefulInteractiveElement, Style, Task,
+    TextRun, TitlebarOptions, UTF16Selection, UniformListScrollHandle, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowDecorations, WindowOptions,
+    actions, div, fill, hsla, point, prelude::*, px, relative, size, svg, uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
 #[cfg(target_os = "macos")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::{
-    path::{Path, PathBuf},
+    ops::Range,
+    path::PathBuf,
     sync::mpsc::{self, TryRecvError},
     time::Duration,
 };
 
-actions!(frame_gpui_ce, [Quit]);
+actions!(
+    frame_gpui_ce,
+    [
+        Quit,
+        TextInputBackspace,
+        TextInputDelete,
+        TextInputLeft,
+        TextInputRight,
+        TextInputSelectLeft,
+        TextInputSelectRight,
+        TextInputHome,
+        TextInputEnd,
+        TextInputSelectAll,
+        TextInputCopy,
+        TextInputCut,
+        TextInputPaste,
+    ]
+);
 
 const FILE_LIST_ACTIONS_WIDTH: f32 = 64.0;
 const FILE_LIST_ACTION_BUTTON_SIZE: f32 = 24.0;
@@ -82,6 +102,11 @@ const DEFAULT_CROP_X: f64 = 0.1;
 const DEFAULT_CROP_Y: f64 = 0.1;
 const DEFAULT_CROP_SIZE: f64 = 0.8;
 const CROP_HANDLE_SIZE: f32 = 10.0;
+const FRAME_TEXT_INPUT_CONTEXT: &str = "FrameTextInput";
+const TEXT_INPUT_CARET_WIDTH: f32 = 1.5;
+const TEXT_INPUT_CARET_HEIGHT: f32 = 14.0;
+const TEXT_INPUT_BLINK_INTERVAL: Duration = Duration::from_millis(500);
+const TEXT_INPUT_BLINK_PAUSE: Duration = Duration::from_millis(300);
 
 struct FrameRoot {
     active_view: ActiveView,
@@ -96,6 +121,14 @@ struct FrameRoot {
     max_concurrency_draft: String,
     max_concurrency_error: Option<String>,
     app_settings_value_focus: Option<FocusHandle>,
+    settings_output_name_focus: Option<FocusHandle>,
+    active_text_input: Option<FrameTextInputKind>,
+    max_concurrency_input: FrameTextInputRuntime,
+    output_name_input: FrameTextInputRuntime,
+    text_input_cursor_visible: bool,
+    text_input_cursor_paused: bool,
+    text_input_cursor_epoch: usize,
+    text_input_cursor_task: Task<()>,
     source_metadata: SourceMetadataStore,
     conversion_processes: ConversionProcessController,
     preview_crop_file_id: Option<String>,
@@ -105,6 +138,34 @@ struct FrameRoot {
     preview_crop_drag: Option<PreviewCropDragState>,
     native_titlebar_controls_hidden: bool,
     next_file_sequence: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FrameTextInputKind {
+    MaxConcurrency,
+    OutputName,
+}
+
+struct FrameTextInputRuntime {
+    selected_range: Range<usize>,
+    selection_reversed: bool,
+    marked_range: Option<Range<usize>>,
+    last_layout: Option<ShapedLine>,
+    last_bounds: Option<Bounds<Pixels>>,
+    is_selecting: bool,
+}
+
+impl Default for FrameTextInputRuntime {
+    fn default() -> Self {
+        Self {
+            selected_range: 0..0,
+            selection_reversed: false,
+            marked_range: None,
+            last_layout: None,
+            last_bounds: None,
+            is_selecting: false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -123,6 +184,7 @@ struct SettingsRenderState<'a> {
     metadata_error: Option<&'a str>,
     settings_disabled: bool,
     output_name: &'a str,
+    output_name_focus: Option<&'a FocusHandle>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -148,6 +210,14 @@ impl FrameRoot {
             max_concurrency_draft: DEFAULT_MAX_CONCURRENCY.to_string(),
             max_concurrency_error: None,
             app_settings_value_focus: None,
+            settings_output_name_focus: None,
+            active_text_input: None,
+            max_concurrency_input: FrameTextInputRuntime::default(),
+            output_name_input: FrameTextInputRuntime::default(),
+            text_input_cursor_visible: false,
+            text_input_cursor_paused: false,
+            text_input_cursor_epoch: 0,
+            text_input_cursor_task: Task::ready(()),
             source_metadata: SourceMetadataStore::default(),
             conversion_processes: ConversionProcessController::default(),
             preview_crop_file_id: None,
@@ -303,48 +373,6 @@ impl FrameRoot {
         .detach();
     }
 
-    fn prompt_output_name(&mut self, cx: &mut Context<Self>) {
-        let Some(file) = self.file_queue.selected_file().cloned() else {
-            return;
-        };
-        if file.locks_settings() {
-            return;
-        }
-
-        let source_path = PathBuf::from(&file.path);
-        let directory = source_path
-            .parent()
-            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-        let suggested_name = suggested_output_file_name(&file.output_name, &file.config.container);
-        let receiver = cx.prompt_for_new_path(&directory, Some(&suggested_name));
-
-        cx.spawn(async move |this, cx| {
-            let path = match receiver.await {
-                Ok(Ok(Some(path))) => path,
-                Ok(Ok(None)) | Err(_) => return,
-                Ok(Err(error)) => {
-                    eprintln!("Failed to open output name picker: {error}");
-                    return;
-                }
-            };
-            let Some(file_name) = path
-                .file_name()
-                .and_then(|file_name| file_name.to_str())
-                .map(str::to_string)
-            else {
-                return;
-            };
-
-            this.update(cx, |root, cx| {
-                if root.file_queue.update_selected_output_name(&file_name) {
-                    cx.notify();
-                }
-            })
-            .ok();
-        })
-        .detach();
-    }
-
     fn queue_selected_conversion_tasks(&mut self) -> Vec<frame_core::types::ConversionTask> {
         self.file_queue
             .queue_selected_pending_conversions()
@@ -437,40 +465,9 @@ impl FrameRoot {
         self.is_settings_open = false;
         self.max_concurrency_error = None;
         self.app_settings_value_focus = None;
-    }
-
-    fn handle_max_concurrency_key(&mut self, event: &KeyDownEvent) -> bool {
-        match event.keystroke.key.as_str() {
-            "backspace" => {
-                self.max_concurrency_draft.pop();
-                self.max_concurrency_error = None;
-                true
-            }
-            "escape" => {
-                self.max_concurrency_draft = self.max_concurrency.to_string();
-                self.max_concurrency_error = None;
-                true
-            }
-            "enter" => self.apply_max_concurrency_draft(),
-            _ => event
-                .keystroke
-                .key_char
-                .as_deref()
-                .or(Some(event.keystroke.key.as_str()))
-                .and_then(max_concurrency_digit_from_key)
-                .is_some_and(|digit| {
-                    self.push_max_concurrency_digit(digit);
-                    true
-                }),
+        if self.active_text_input == Some(FrameTextInputKind::MaxConcurrency) {
+            self.stop_text_input_cursor();
         }
-    }
-
-    fn push_max_concurrency_digit(&mut self, digit: char) {
-        if self.max_concurrency_draft == "0" {
-            self.max_concurrency_draft.clear();
-        }
-        self.max_concurrency_draft.push(digit);
-        self.max_concurrency_error = None;
     }
 
     fn apply_max_concurrency_draft(&mut self) -> bool {
@@ -498,6 +495,534 @@ impl FrameRoot {
         let trimmed = self.max_concurrency_draft.trim();
         let value = trimmed.parse::<usize>().ok()?;
         (value > 0).then_some(value)
+    }
+
+    fn text_input_runtime(&self, kind: FrameTextInputKind) -> &FrameTextInputRuntime {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => &self.max_concurrency_input,
+            FrameTextInputKind::OutputName => &self.output_name_input,
+        }
+    }
+
+    fn text_input_runtime_mut(&mut self, kind: FrameTextInputKind) -> &mut FrameTextInputRuntime {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => &mut self.max_concurrency_input,
+            FrameTextInputKind::OutputName => &mut self.output_name_input,
+        }
+    }
+
+    fn text_input_focus_handle(&self, kind: FrameTextInputKind) -> Option<&FocusHandle> {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => self.app_settings_value_focus.as_ref(),
+            FrameTextInputKind::OutputName => self.settings_output_name_focus.as_ref(),
+        }
+    }
+
+    fn focused_text_input_kind(&self, window: &Window) -> Option<FrameTextInputKind> {
+        if self
+            .text_input_focus_handle(FrameTextInputKind::MaxConcurrency)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MaxConcurrency)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::OutputName)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::OutputName)
+        } else {
+            None
+        }
+    }
+
+    fn active_text_input_kind(&self, window: &Window) -> Option<FrameTextInputKind> {
+        self.focused_text_input_kind(window)
+            .or(self.active_text_input)
+    }
+
+    fn text_input_disabled(&self, kind: FrameTextInputKind) -> bool {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => false,
+            FrameTextInputKind::OutputName => self.file_queue.selected_file_locked(),
+        }
+    }
+
+    fn text_input_value(&self, kind: FrameTextInputKind) -> String {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => self.max_concurrency_draft.clone(),
+            FrameTextInputKind::OutputName => self
+                .file_queue
+                .selected_file()
+                .map_or_else(String::new, |file| file.output_name.clone()),
+        }
+    }
+
+    fn write_text_input_value(
+        &mut self,
+        kind: FrameTextInputKind,
+        candidate: &str,
+    ) -> Option<String> {
+        match kind {
+            FrameTextInputKind::MaxConcurrency => {
+                let next = sanitize_number_input(candidate);
+                if self.max_concurrency_draft != next {
+                    self.max_concurrency_draft = next.clone();
+                    self.max_concurrency_error = None;
+                }
+                Some(next)
+            }
+            FrameTextInputKind::OutputName => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next = sanitize_output_name(candidate);
+                self.file_queue.set_selected_output_name_from_input(&next);
+                Some(next)
+            }
+        }
+    }
+
+    fn clamped_text_input_selection(
+        &mut self,
+        kind: FrameTextInputKind,
+        text: &str,
+    ) -> Range<usize> {
+        let runtime = self.text_input_runtime_mut(kind);
+        runtime.selected_range = clamp_text_range(text, &runtime.selected_range);
+        runtime.selected_range.clone()
+    }
+
+    fn text_input_cursor_offset(&mut self, kind: FrameTextInputKind, text: &str) -> usize {
+        self.clamped_text_input_selection(kind, text);
+        let runtime = self.text_input_runtime(kind);
+        if runtime.selection_reversed {
+            runtime.selected_range.start
+        } else {
+            runtime.selected_range.end
+        }
+    }
+
+    fn move_text_input_to(
+        &mut self,
+        kind: FrameTextInputKind,
+        offset: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let text = self.text_input_value(kind);
+        let offset = clamp_text_offset(&text, offset);
+        let runtime = self.text_input_runtime_mut(kind);
+        runtime.selected_range = offset..offset;
+        runtime.selection_reversed = false;
+        runtime.marked_range = None;
+        self.active_text_input = Some(kind);
+        self.pause_text_input_cursor(cx);
+    }
+
+    fn select_text_input_to(
+        &mut self,
+        kind: FrameTextInputKind,
+        offset: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let text = self.text_input_value(kind);
+        let offset = clamp_text_offset(&text, offset);
+        let runtime = self.text_input_runtime_mut(kind);
+        if runtime.selection_reversed {
+            runtime.selected_range.start = offset;
+        } else {
+            runtime.selected_range.end = offset;
+        }
+        if runtime.selected_range.end < runtime.selected_range.start {
+            runtime.selection_reversed = !runtime.selection_reversed;
+            runtime.selected_range = runtime.selected_range.end..runtime.selected_range.start;
+        }
+        runtime.selected_range = clamp_text_range(&text, &runtime.selected_range);
+        runtime.marked_range = None;
+        self.active_text_input = Some(kind);
+        self.pause_text_input_cursor(cx);
+    }
+
+    fn replace_text_input_range(
+        &mut self,
+        kind: FrameTextInputKind,
+        range_utf16: Option<Range<usize>>,
+        new_text: &str,
+        new_selected_range_utf16: Option<Range<usize>>,
+        mark_inserted_text: bool,
+    ) -> bool {
+        if self.text_input_disabled(kind) {
+            return false;
+        }
+
+        let current = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &current);
+        let marked_range = self.text_input_runtime(kind).marked_range.clone();
+        let range = range_utf16
+            .as_ref()
+            .map(|range| text_range_from_utf16(&current, range))
+            .or(marked_range)
+            .unwrap_or(selected_range);
+        let range = clamp_text_range(&current, &range);
+        let replacement = sanitize_replacement_text(kind, new_text);
+
+        if replacement.is_empty() && !new_text.is_empty() && range.is_empty() {
+            return false;
+        }
+
+        let candidate = format!(
+            "{}{}{}",
+            &current[..range.start],
+            replacement,
+            &current[range.end..]
+        );
+        let Some(actual) = self.write_text_input_value(kind, &candidate) else {
+            return false;
+        };
+
+        let selection_start = new_selected_range_utf16
+            .as_ref()
+            .map(|range| text_range_from_utf16(&replacement, range).start)
+            .unwrap_or(replacement.len());
+        let selection_end = new_selected_range_utf16
+            .as_ref()
+            .map(|range| text_range_from_utf16(&replacement, range).end)
+            .unwrap_or(replacement.len());
+        let next_range = clamp_text_range(
+            &actual,
+            &((range.start + selection_start)..(range.start + selection_end)),
+        );
+        let next_marked_range = if mark_inserted_text && !replacement.is_empty() {
+            Some(clamp_text_range(
+                &actual,
+                &(range.start..(range.start + replacement.len())),
+            ))
+        } else {
+            None
+        };
+
+        let runtime = self.text_input_runtime_mut(kind);
+        runtime.selected_range = next_range;
+        runtime.selection_reversed = false;
+        runtime.marked_range = next_marked_range;
+        self.active_text_input = Some(kind);
+        true
+    }
+
+    fn text_input_index_for_mouse_position(
+        &self,
+        kind: FrameTextInputKind,
+        position: Point<Pixels>,
+    ) -> usize {
+        let text = self.text_input_value(kind);
+        if text.is_empty() {
+            return 0;
+        }
+
+        let runtime = self.text_input_runtime(kind);
+        let (Some(bounds), Some(line)) =
+            (runtime.last_bounds.as_ref(), runtime.last_layout.as_ref())
+        else {
+            return text.len();
+        };
+
+        if position.x <= bounds.left() {
+            return 0;
+        }
+        if position.x >= bounds.right() {
+            return text.len();
+        }
+
+        clamp_text_offset(&text, line.closest_index_for_x(position.x - bounds.left()))
+    }
+
+    fn text_input_mouse_down(
+        &mut self,
+        kind: FrameTextInputKind,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.text_input_disabled(kind) {
+            return;
+        }
+        if let Some(focus) = self.text_input_focus_handle(kind) {
+            focus.focus(window, cx);
+        }
+        self.active_text_input = Some(kind);
+        self.text_input_runtime_mut(kind).is_selecting = true;
+        let offset = self.text_input_index_for_mouse_position(kind, event.position);
+        if event.modifiers.shift {
+            self.select_text_input_to(kind, offset, cx);
+        } else {
+            self.move_text_input_to(kind, offset, cx);
+        }
+    }
+
+    fn text_input_mouse_move(
+        &mut self,
+        kind: FrameTextInputKind,
+        event: &MouseMoveEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.text_input_runtime(kind).is_selecting {
+            let offset = self.text_input_index_for_mouse_position(kind, event.position);
+            self.select_text_input_to(kind, offset, cx);
+        }
+    }
+
+    fn text_input_mouse_up(
+        &mut self,
+        kind: FrameTextInputKind,
+        _event: &MouseUpEvent,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        self.text_input_runtime_mut(kind).is_selecting = false;
+    }
+
+    fn text_input_backspace(
+        &mut self,
+        _: &TextInputBackspace,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        let range = if selected_range.is_empty() {
+            let cursor = self.text_input_cursor_offset(kind, &text);
+            previous_text_boundary(&text, cursor)..cursor
+        } else {
+            selected_range
+        };
+        let range_utf16 = text_range_to_utf16(&text, &range);
+        if self.replace_text_input_range(kind, Some(range_utf16), "", None, false) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn text_input_delete(
+        &mut self,
+        _: &TextInputDelete,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        let range = if selected_range.is_empty() {
+            let cursor = self.text_input_cursor_offset(kind, &text);
+            cursor..next_text_boundary(&text, cursor)
+        } else {
+            selected_range
+        };
+        let range_utf16 = text_range_to_utf16(&text, &range);
+        if self.replace_text_input_range(kind, Some(range_utf16), "", None, false) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn text_input_left(&mut self, _: &TextInputLeft, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        let next = if selected_range.is_empty() {
+            previous_text_boundary(&text, self.text_input_cursor_offset(kind, &text))
+        } else {
+            selected_range.start
+        };
+        self.move_text_input_to(kind, next, cx);
+    }
+
+    fn text_input_right(
+        &mut self,
+        _: &TextInputRight,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        let next = if selected_range.is_empty() {
+            next_text_boundary(&text, self.text_input_cursor_offset(kind, &text))
+        } else {
+            selected_range.end
+        };
+        self.move_text_input_to(kind, next, cx);
+    }
+
+    fn text_input_select_left(
+        &mut self,
+        _: &TextInputSelectLeft,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let cursor = self.text_input_cursor_offset(kind, &text);
+        self.select_text_input_to(kind, previous_text_boundary(&text, cursor), cx);
+    }
+
+    fn text_input_select_right(
+        &mut self,
+        _: &TextInputSelectRight,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let cursor = self.text_input_cursor_offset(kind, &text);
+        self.select_text_input_to(kind, next_text_boundary(&text, cursor), cx);
+    }
+
+    fn text_input_home(&mut self, _: &TextInputHome, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(kind) = self.active_text_input_kind(window) {
+            self.move_text_input_to(kind, 0, cx);
+        }
+    }
+
+    fn text_input_end(&mut self, _: &TextInputEnd, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(kind) = self.active_text_input_kind(window) {
+            let text = self.text_input_value(kind);
+            self.move_text_input_to(kind, text.len(), cx);
+        }
+    }
+
+    fn text_input_select_all(
+        &mut self,
+        _: &TextInputSelectAll,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let runtime = self.text_input_runtime_mut(kind);
+        runtime.selected_range = 0..text.len();
+        runtime.selection_reversed = false;
+        runtime.marked_range = None;
+        self.pause_text_input_cursor(cx);
+    }
+
+    fn text_input_copy(&mut self, _: &TextInputCopy, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        if !selected_range.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(text[selected_range].to_string()));
+        }
+    }
+
+    fn text_input_cut(&mut self, _: &TextInputCut, window: &mut Window, cx: &mut Context<Self>) {
+        self.text_input_copy(&TextInputCopy, window, cx);
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let text = self.text_input_value(kind);
+        let selected_range = self.clamped_text_input_selection(kind, &text);
+        if selected_range.is_empty() {
+            return;
+        }
+        let range_utf16 = text_range_to_utf16(&text, &selected_range);
+        if self.replace_text_input_range(kind, Some(range_utf16), "", None, false) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn text_input_paste(
+        &mut self,
+        _: &TextInputPaste,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input_kind(window) else {
+            return;
+        };
+        let Some(text) = cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .map(|text| text.replace('\n', " "))
+        else {
+            return;
+        };
+        if self.replace_text_input_range(kind, None, &text, None, false) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn next_text_input_cursor_epoch(&mut self) -> usize {
+        self.text_input_cursor_epoch += 1;
+        self.text_input_cursor_epoch
+    }
+
+    fn start_text_input_cursor(&mut self, cx: &mut Context<Self>) {
+        self.text_input_cursor_paused = false;
+        self.blink_text_input_cursor(self.text_input_cursor_epoch, cx);
+    }
+
+    fn stop_text_input_cursor(&mut self) {
+        self.active_text_input = None;
+        self.text_input_cursor_paused = false;
+        self.text_input_cursor_visible = false;
+        self.next_text_input_cursor_epoch();
+    }
+
+    fn pause_text_input_cursor(&mut self, cx: &mut Context<Self>) {
+        self.text_input_cursor_paused = true;
+        self.text_input_cursor_visible = true;
+        cx.notify();
+
+        let epoch = self.next_text_input_cursor_epoch();
+        self.text_input_cursor_task = cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(TEXT_INPUT_BLINK_PAUSE).await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |root, cx| {
+                    root.text_input_cursor_paused = false;
+                    root.blink_text_input_cursor(epoch, cx);
+                });
+            }
+        });
+    }
+
+    fn blink_text_input_cursor(&mut self, epoch: usize, cx: &mut Context<Self>) {
+        if self.active_text_input.is_none() {
+            self.text_input_cursor_visible = false;
+            return;
+        }
+        if self.text_input_cursor_paused || epoch != self.text_input_cursor_epoch {
+            self.text_input_cursor_visible = true;
+            return;
+        }
+
+        self.text_input_cursor_visible = !self.text_input_cursor_visible;
+        cx.notify();
+
+        let next_epoch = self.next_text_input_cursor_epoch();
+        self.text_input_cursor_task = cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(TEXT_INPUT_BLINK_INTERVAL)
+                .await;
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |root, cx| {
+                    root.blink_text_input_cursor(next_epoch, cx);
+                });
+            }
+        });
     }
 
     fn pause_conversion_task(&mut self, id: &str) -> bool {
@@ -1055,20 +1580,394 @@ impl FrameRoot {
     }
 }
 
-fn suggested_output_file_name(output_name: &str, container: &str) -> String {
-    let mut suggested = PathBuf::from(output_name);
-    suggested.set_extension(container);
-    suggested
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .map_or_else(|| format!("output_converted.{container}"), str::to_string)
+fn sanitize_number_input(value: &str) -> String {
+    value.chars().filter(char::is_ascii_digit).collect()
 }
 
-fn max_concurrency_digit_from_key(key: &str) -> Option<char> {
-    let mut chars = key.chars();
-    let digit = chars.next()?;
-    (chars.next().is_none() && digit.is_ascii_digit()).then_some(digit)
+fn sanitize_replacement_text(kind: FrameTextInputKind, value: &str) -> String {
+    match kind {
+        FrameTextInputKind::MaxConcurrency => sanitize_number_input(value),
+        FrameTextInputKind::OutputName => value.chars().filter(|ch| !ch.is_control()).collect(),
+    }
+}
+
+fn clamp_text_offset(text: &str, offset: usize) -> usize {
+    let mut offset = offset.min(text.len());
+    while offset > 0 && !text.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    offset
+}
+
+fn clamp_text_range(text: &str, range: &Range<usize>) -> Range<usize> {
+    let start = clamp_text_offset(text, range.start);
+    let end = clamp_text_offset(text, range.end);
+    start.min(end)..start.max(end)
+}
+
+fn previous_text_boundary(text: &str, offset: usize) -> usize {
+    let offset = clamp_text_offset(text, offset);
+    text[..offset]
+        .char_indices()
+        .last()
+        .map_or(0, |(index, _)| index)
+}
+
+fn next_text_boundary(text: &str, offset: usize) -> usize {
+    let offset = clamp_text_offset(text, offset);
+    if offset >= text.len() {
+        return text.len();
+    }
+
+    text[offset..]
+        .char_indices()
+        .find_map(|(index, _)| (index > 0).then_some(offset + index))
+        .unwrap_or(text.len())
+}
+
+fn text_offset_to_utf16(text: &str, offset: usize) -> usize {
+    text[..clamp_text_offset(text, offset)]
+        .encode_utf16()
+        .count()
+}
+
+fn text_offset_from_utf16(text: &str, offset_utf16: usize) -> usize {
+    let mut utf16_count = 0;
+    let mut utf8_offset = 0;
+
+    for ch in text.chars() {
+        if utf16_count >= offset_utf16 {
+            break;
+        }
+        utf16_count += ch.len_utf16();
+        utf8_offset += ch.len_utf8();
+    }
+
+    clamp_text_offset(text, utf8_offset)
+}
+
+fn text_range_to_utf16(text: &str, range: &Range<usize>) -> Range<usize> {
+    text_offset_to_utf16(text, range.start)..text_offset_to_utf16(text, range.end)
+}
+
+fn text_range_from_utf16(text: &str, range: &Range<usize>) -> Range<usize> {
+    let start = text_offset_from_utf16(text, range.start);
+    let end = text_offset_from_utf16(text, range.end);
+    clamp_text_range(text, &(start..end))
+}
+
+impl EntityInputHandler for FrameRoot {
+    fn text_for_range(
+        &mut self,
+        range_utf16: Range<usize>,
+        actual_range: &mut Option<Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        let kind = self.active_text_input?;
+        let text = self.text_input_value(kind);
+        let range = text_range_from_utf16(&text, &range_utf16);
+        actual_range.replace(text_range_to_utf16(&text, &range));
+        Some(text[range].to_string())
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        let kind = self.active_text_input?;
+        let text = self.text_input_value(kind);
+        let runtime = self.text_input_runtime(kind);
+        Some(UTF16Selection {
+            range: text_range_to_utf16(&text, &runtime.selected_range),
+            reversed: runtime.selection_reversed,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Range<usize>> {
+        let kind = self.active_text_input?;
+        let text = self.text_input_value(kind);
+        self.text_input_runtime(kind)
+            .marked_range
+            .as_ref()
+            .map(|range| text_range_to_utf16(&text, range))
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+        if let Some(kind) = self.active_text_input {
+            self.text_input_runtime_mut(kind).marked_range = None;
+        }
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        range_utf16: Option<Range<usize>>,
+        text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input else {
+            return;
+        };
+        if self.replace_text_input_range(kind, range_utf16, text, None, false) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range_utf16: Option<Range<usize>>,
+        new_text: &str,
+        new_selected_range_utf16: Option<Range<usize>>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(kind) = self.active_text_input else {
+            return;
+        };
+        if self.replace_text_input_range(
+            kind,
+            range_utf16,
+            new_text,
+            new_selected_range_utf16,
+            true,
+        ) {
+            self.pause_text_input_cursor(cx);
+        }
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        range_utf16: Range<usize>,
+        bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        let kind = self.active_text_input?;
+        let text = self.text_input_value(kind);
+        let range = text_range_from_utf16(&text, &range_utf16);
+        let line = self.text_input_runtime(kind).last_layout.as_ref()?;
+        let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
+        Some(Bounds::from_corners(
+            point(bounds.left() + line.x_for_index(range.start), text_top),
+            point(
+                bounds.left() + line.x_for_index(range.end),
+                text_top + px(TEXT_INPUT_CARET_HEIGHT),
+            ),
+        ))
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        point: Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        let kind = self.active_text_input?;
+        let text = self.text_input_value(kind);
+        let runtime = self.text_input_runtime(kind);
+        let bounds = runtime.last_bounds.as_ref()?;
+        let line = runtime.last_layout.as_ref()?;
+        let offset = clamp_text_offset(&text, line.closest_index_for_x(point.x - bounds.left()));
+        Some(text_offset_to_utf16(&text, offset))
+    }
+
+    fn accepts_text_input(&self, _window: &mut Window, _cx: &mut Context<Self>) -> bool {
+        self.active_text_input
+            .is_some_and(|kind| !self.text_input_disabled(kind))
+    }
+}
+
+struct FrameTextInputElement {
+    owner: Entity<FrameRoot>,
+    kind: FrameTextInputKind,
+    placeholder: SharedString,
+    disabled: bool,
+    focus_handle: FocusHandle,
+}
+
+struct FrameTextInputPrepaintState {
+    line: Option<ShapedLine>,
+    cursor: Option<PaintQuad>,
+    selection: Option<PaintQuad>,
+}
+
+impl IntoElement for FrameTextInputElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for FrameTextInputElement {
+    type RequestLayoutState = ();
+    type PrepaintState = FrameTextInputPrepaintState;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let mut style = Style::default();
+        style.size.width = relative(1.0).into();
+        style.size.height = px(SETTINGS_CONTROL_HEIGHT).into();
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let root = self.owner.read(cx);
+        let content = root.text_input_value(self.kind);
+        let runtime = root.text_input_runtime(self.kind);
+        let selected_range = clamp_text_range(&content, &runtime.selected_range);
+        let cursor_offset = if runtime.selection_reversed {
+            selected_range.start
+        } else {
+            selected_range.end
+        };
+        let is_placeholder = content.is_empty();
+        let display_text: SharedString = if is_placeholder {
+            self.placeholder.clone()
+        } else {
+            content.into()
+        };
+        let mut style = window.text_style();
+        style.color = if is_placeholder || self.disabled {
+            hsla(0.0, 0.0, 1.0, 0.40)
+        } else {
+            hsla(0.0, 0.0, 1.0, 1.0)
+        };
+
+        let run = TextRun {
+            len: display_text.len(),
+            font: style.font(),
+            color: style.color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        let line = window
+            .text_system()
+            .shape_line(display_text, font_size, &[run], None);
+        let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
+        let cursor_x = line.x_for_index(cursor_offset);
+        let focused = self.focus_handle.is_focused(window);
+        let show_cursor = focused
+            && root.active_text_input == Some(self.kind)
+            && root.text_input_cursor_visible
+            && window.is_window_active()
+            && selected_range.is_empty();
+
+        let cursor = show_cursor.then(|| {
+            fill(
+                Bounds::new(
+                    point(bounds.left() + cursor_x, text_top),
+                    size(px(TEXT_INPUT_CARET_WIDTH), px(TEXT_INPUT_CARET_HEIGHT)),
+                ),
+                hsla(0.0, 0.0, 1.0, 1.0),
+            )
+        });
+        let selection = (!selected_range.is_empty()).then(|| {
+            fill(
+                Bounds::from_corners(
+                    point(
+                        bounds.left() + line.x_for_index(selected_range.start),
+                        text_top,
+                    ),
+                    point(
+                        bounds.left() + line.x_for_index(selected_range.end),
+                        text_top + px(TEXT_INPUT_CARET_HEIGHT),
+                    ),
+                ),
+                hsla(0.0, 0.0, 1.0, 0.18),
+            )
+        });
+
+        FrameTextInputPrepaintState {
+            line: Some(line),
+            cursor,
+            selection,
+        }
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if !self.disabled {
+            window.handle_input(
+                &self.focus_handle,
+                ElementInputHandler::new(bounds, self.owner.clone()),
+                cx,
+            );
+        }
+
+        let focused = self.focus_handle.is_focused(window);
+        let kind = self.kind;
+        self.owner.update(cx, |root, cx| {
+            if focused && root.active_text_input != Some(kind) {
+                root.active_text_input = Some(kind);
+                root.start_text_input_cursor(cx);
+            }
+        });
+
+        if let Some(selection) = prepaint.selection.take() {
+            window.paint_quad(selection);
+        }
+
+        let line = prepaint.line.take().expect("input line should be shaped");
+        let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
+        line.paint(
+            point(bounds.left(), text_top),
+            px(TEXT_INPUT_CARET_HEIGHT),
+            gpui::TextAlign::Left,
+            None,
+            window,
+            cx,
+        )
+        .ok();
+
+        if let Some(cursor) = prepaint.cursor.take() {
+            window.paint_quad(cursor);
+        }
+
+        self.owner.update(cx, |root, _cx| {
+            let runtime = root.text_input_runtime_mut(kind);
+            runtime.last_layout = Some(line);
+            runtime.last_bounds = Some(bounds);
+        });
+    }
 }
 
 impl Render for FrameRoot {
@@ -1091,6 +1990,9 @@ impl Render for FrameRoot {
             selected_file.map_or_else(ConversionConfig::default, |file| file.config.clone());
         let selected_output_name =
             selected_file.map_or_else(String::new, |file| file.output_name.clone());
+        if self.active_text_input.is_some() && self.focused_text_input_kind(window).is_none() {
+            self.stop_text_input_cursor();
+        }
         self.sync_preview_crop_for_selection(
             selected_file_id.as_deref(),
             &selected_config_snapshot,
@@ -1099,20 +2001,28 @@ impl Render for FrameRoot {
             self.preview_crop_render_state(source_metadata.as_ref(), &selected_config_snapshot);
         let content = div().flex_1().p(px(CONTENT_PADDING));
         let content = match state.active_view {
-            ActiveView::Workspace => content.child(workspace_view(
-                &self.file_queue,
-                SettingsRenderState {
-                    active_tab: self.settings_active_tab,
-                    config: &selected_config_snapshot,
-                    metadata: source_metadata.as_ref(),
-                    metadata_status: source_metadata_entry.status,
-                    metadata_error: source_metadata_entry.error.as_deref(),
-                    settings_disabled: self.file_queue.selected_file_locked(),
-                    output_name: &selected_output_name,
-                },
-                preview_crop,
-                cx,
-            )),
+            ActiveView::Workspace => {
+                let output_name_focus = self
+                    .settings_output_name_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                content.child(workspace_view(
+                    &self.file_queue,
+                    SettingsRenderState {
+                        active_tab: self.settings_active_tab,
+                        config: &selected_config_snapshot,
+                        metadata: source_metadata.as_ref(),
+                        metadata_status: source_metadata_entry.status,
+                        metadata_error: source_metadata_entry.error.as_deref(),
+                        settings_disabled: self.file_queue.selected_file_locked(),
+                        output_name: &selected_output_name,
+                        output_name_focus: Some(&output_name_focus),
+                    },
+                    preview_crop,
+                    window,
+                    cx,
+                ))
+            }
             ActiveView::Logs => content.child(logs_view(
                 &self.file_queue,
                 &self.conversion_events,
@@ -1148,6 +2058,7 @@ impl Render for FrameRoot {
                 &self.max_concurrency_draft,
                 self.max_concurrency_error.as_deref(),
                 &value_focus,
+                window,
                 cx,
             ));
         }
@@ -1242,6 +2153,7 @@ fn app_settings_sheet(
     draft_max_concurrency: &str,
     error: Option<&str>,
     value_focus: &FocusHandle,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let draft_is_dirty = draft_max_concurrency.trim() != current_max_concurrency.to_string();
@@ -1314,6 +2226,7 @@ fn app_settings_sheet(
                                     draft_max_concurrency,
                                     draft_is_dirty,
                                     value_focus,
+                                    window,
                                     cx,
                                 ))
                                 .child(settings_hint_text(
@@ -1336,17 +2249,25 @@ fn app_settings_concurrency_control(
     draft_max_concurrency: &str,
     can_apply: bool,
     value_focus: &FocusHandle,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
         .flex()
         .items_center()
         .gap_2()
-        .child(app_settings_value_field(
-            draft_max_concurrency,
-            value_focus,
+        .child(div().flex_1().min_w_0().child(frame_text_input(
+            FrameTextInputSpec {
+                id: "app-settings-max-concurrency-value",
+                value: draft_max_concurrency,
+                placeholder: "2",
+                disabled: false,
+                focus: Some(value_focus),
+                kind: FrameTextInputKind::MaxConcurrency,
+            },
+            window,
             cx,
-        ))
+        )))
         .child(app_settings_apply_button(can_apply).on_click(cx.listener(
             move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -1357,43 +2278,108 @@ fn app_settings_concurrency_control(
         )))
 }
 
-fn app_settings_value_field(
-    draft_max_concurrency: &str,
-    value_focus: &FocusHandle,
+struct FrameTextInputSpec<'a> {
+    id: &'static str,
+    value: &'a str,
+    placeholder: &'static str,
+    disabled: bool,
+    focus: Option<&'a FocusHandle>,
+    kind: FrameTextInputKind,
+}
+
+fn frame_text_input(
+    spec: FrameTextInputSpec<'_>,
+    _window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let focus_for_click = value_focus.clone();
+    let FrameTextInputSpec {
+        id,
+        value,
+        placeholder,
+        disabled,
+        focus,
+        kind,
+    } = spec;
+    let is_placeholder = value.is_empty();
+    let label = if is_placeholder { placeholder } else { value }.to_string();
+    let label_color = if disabled || is_placeholder {
+        theme::FRAME_GRAY_600
+    } else {
+        theme::FOREGROUND
+    };
 
-    div()
-        .id("app-settings-max-concurrency-value")
+    let mut field = div()
+        .id(id)
         .h(px(SETTINGS_CONTROL_HEIGHT))
-        .flex_1()
+        .w_full()
         .flex()
         .items_center()
+        .min_w_0()
         .rounded(px(theme::RADIUS_SM))
         .bg(color(theme::BACKGROUND))
         .px(px(10.0))
-        .text_color(if draft_max_concurrency.is_empty() {
-            color(theme::FRAME_GRAY_600)
-        } else {
-            color(theme::FOREGROUND)
-        })
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(color(label_color))
+        .opacity(if disabled { 0.5 } else { 1.0 })
         .shadow(input_highlight_shadows())
-        .track_focus(value_focus)
-        .cursor_text()
-        .focus(|style| style.bg(color(theme::FRAME_GRAY_100)))
-        .hover(|style| style.bg(color(theme::FRAME_GRAY_100)))
-        .on_click(cx.listener(move |_, _: &ClickEvent, window, cx| {
-            cx.stop_propagation();
-            focus_for_click.focus(window, cx);
-        }))
-        .on_key_down(cx.listener(|root, event: &KeyDownEvent, _window, cx| {
-            if root.handle_max_concurrency_key(event) {
-                cx.stop_propagation();
-                cx.notify();
-            }
-        }))
-        .child(draft_max_concurrency.to_string())
+        .key_context(FRAME_TEXT_INPUT_CONTEXT)
+        .when(!disabled, |this| this.cursor_text())
+        .when(disabled, |this| this.cursor_not_allowed())
+        .when(!disabled, |this| {
+            this.on_action(cx.listener(FrameRoot::text_input_backspace))
+                .on_action(cx.listener(FrameRoot::text_input_delete))
+                .on_action(cx.listener(FrameRoot::text_input_left))
+                .on_action(cx.listener(FrameRoot::text_input_right))
+                .on_action(cx.listener(FrameRoot::text_input_select_left))
+                .on_action(cx.listener(FrameRoot::text_input_select_right))
+                .on_action(cx.listener(FrameRoot::text_input_home))
+                .on_action(cx.listener(FrameRoot::text_input_end))
+                .on_action(cx.listener(FrameRoot::text_input_select_all))
+                .on_action(cx.listener(FrameRoot::text_input_copy))
+                .on_action(cx.listener(FrameRoot::text_input_cut))
+                .on_action(cx.listener(FrameRoot::text_input_paste))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |root, event: &MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        root.text_input_mouse_down(kind, event, window, cx);
+                    }),
+                )
+                .on_mouse_move(
+                    cx.listener(move |root, event: &MouseMoveEvent, window, cx| {
+                        cx.stop_propagation();
+                        root.text_input_mouse_move(kind, event, window, cx);
+                    }),
+                )
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(move |root, event: &MouseUpEvent, window, cx| {
+                        cx.stop_propagation();
+                        root.text_input_mouse_up(kind, event, window, cx);
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(move |root, event: &MouseUpEvent, window, cx| {
+                        cx.stop_propagation();
+                        root.text_input_mouse_up(kind, event, window, cx);
+                    }),
+                )
+        });
+
+    if let Some(focus) = focus {
+        field = field.track_focus(focus).child(FrameTextInputElement {
+            owner: cx.entity(),
+            kind,
+            placeholder: SharedString::from(placeholder),
+            disabled,
+            focus_handle: focus.clone(),
+        });
+    } else {
+        field = field.child(div().w_full().min_w_0().truncate().child(label));
+    }
+
+    field
 }
 
 fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
@@ -1423,12 +2409,32 @@ fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
 }
 
 fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::Div> {
-    settings_choice_button(
-        "app-settings-max-concurrency-apply",
-        "APPLY",
-        false,
-        enabled,
-    )
+    let colors = button_colors(ButtonVariant::Secondary, false, enabled);
+
+    div()
+        .id("app-settings-max-concurrency-apply")
+        .h(px(SETTINGS_CONTROL_HEIGHT))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(theme::RADIUS_SM))
+        .px(px(10.0))
+        .bg(color(colors.background))
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(color(colors.foreground))
+        .opacity(colors.opacity)
+        .shadow(button_highlight_shadows())
+        .when(enabled, |this| {
+            this.hover(move |style| {
+                style
+                    .bg(color(colors.hover_background))
+                    .text_color(color(colors.hover_foreground))
+                    .cursor_pointer()
+            })
+            .active(move |style| style.bg(color(colors.active_background)))
+        })
+        .when(!enabled, |this| this.cursor_not_allowed())
+        .child("APPLY")
 }
 
 fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
@@ -1835,6 +2841,7 @@ fn workspace_view(
     file_queue: &FileQueue,
     settings: SettingsRenderState<'_>,
     preview_crop: PreviewCropRenderState,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -1855,7 +2862,7 @@ fn workspace_view(
                 )
                 .child(file_list_panel(file_queue, cx).row_span(FILE_LIST_ROW_SPAN)),
         )
-        .child(settings_panel(settings, cx).col_span(RIGHT_COLUMN_SPAN))
+        .child(settings_panel(settings, window, cx).col_span(RIGHT_COLUMN_SPAN))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3224,7 +4231,11 @@ fn logs_empty_state(message: &'static str) -> gpui::Div {
         .child(message)
 }
 
-fn settings_panel(settings: SettingsRenderState<'_>, cx: &mut Context<FrameRoot>) -> gpui::Div {
+fn settings_panel(
+    settings: SettingsRenderState<'_>,
+    window: &Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     let active_tab =
         resolve_active_settings_tab(settings.active_tab, settings.config, settings.metadata);
     let mut tab_rail = div().flex().items_center().justify_start().gap_1();
@@ -3257,7 +4268,7 @@ fn settings_panel(settings: SettingsRenderState<'_>, cx: &mut Context<FrameRoot>
                 .flex_col()
                 .overflow_y_scroll()
                 .p(px(SETTINGS_PANEL_PADDING))
-                .child(settings_tab_content(active_tab, settings, cx)),
+                .child(settings_tab_content(active_tab, settings, window, cx)),
         )
 }
 
@@ -3312,6 +4323,7 @@ fn settings_tab_button(
 fn settings_tab_content(
     tab: SettingsTab,
     settings: SettingsRenderState<'_>,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let content = div()
@@ -3332,6 +4344,8 @@ fn settings_tab_content(
             settings.metadata,
             settings.settings_disabled,
             settings.output_name,
+            settings.output_name_focus,
+            window,
             cx,
         )),
         SettingsTab::Video => {
@@ -3485,6 +4499,8 @@ fn settings_output_tab(
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
     output_name: &str,
+    output_name_focus: Option<&FocusHandle>,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -3506,10 +4522,12 @@ fn settings_output_tab(
                 .child(settings_output_name_field(
                     output_name,
                     settings_disabled,
+                    output_name_focus,
+                    window,
                     cx,
                 ))
                 .child(settings_hint_text(
-                    "Click to choose a file name. Output stays next to the original file.",
+                    "Output stays next to the original file.",
                 )),
         )
         .child(
@@ -3635,40 +4653,22 @@ fn settings_choice_button(
 fn settings_output_name_field(
     output_name: &str,
     disabled: bool,
+    output_name_focus: Option<&FocusHandle>,
+    window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let value = if output_name.is_empty() {
-        "my_render_final"
-    } else {
-        output_name
-    }
-    .to_string();
-
-    div()
-        .id("settings-output-name-field")
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .rounded(px(theme::RADIUS_SM))
-        .bg(color(theme::BACKGROUND))
-        .px(px(10.0))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(if output_name.is_empty() || disabled {
-            color(theme::FRAME_GRAY_600)
-        } else {
-            color(theme::FOREGROUND)
-        })
-        .shadow(input_highlight_shadows())
-        .when(!disabled, |this| {
-            this.cursor_pointer()
-                .hover(|style| style.bg(color(theme::FRAME_GRAY_100)))
-        })
-        .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            root.prompt_output_name(cx);
-        }))
-        .child(value)
+    frame_text_input(
+        FrameTextInputSpec {
+            id: "settings-output-name-field",
+            value: output_name,
+            placeholder: "my_render_final",
+            disabled,
+            focus: output_name_focus,
+            kind: FrameTextInputKind::OutputName,
+        },
+        window,
+        cx,
+    )
 }
 
 fn settings_hint_text(text: &'static str) -> gpui::Div {
@@ -4053,7 +5053,11 @@ fn row_action_button(
             })
             .active(move |style| style.bg(color(active_background)))
         })
-        .child(icon_svg_inherit(icon, FILE_LIST_ACTION_ICON_SIZE))
+        .child(icon_svg(
+            icon,
+            FILE_LIST_ACTION_ICON_SIZE,
+            color(foreground),
+        ))
 }
 fn row_checkbox_control(
     file_id: String,
@@ -4233,7 +5237,35 @@ fn color(token: theme::RgbaToken) -> Rgba {
 fn init_app(cx: &mut App, name: impl Into<SharedString>) {
     cx.activate(true);
     cx.on_action(|_: &Quit, cx| cx.quit());
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
+    cx.bind_keys([
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new(
+            "backspace",
+            TextInputBackspace,
+            Some(FRAME_TEXT_INPUT_CONTEXT),
+        ),
+        KeyBinding::new("delete", TextInputDelete, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("left", TextInputLeft, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("right", TextInputRight, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new(
+            "shift-left",
+            TextInputSelectLeft,
+            Some(FRAME_TEXT_INPUT_CONTEXT),
+        ),
+        KeyBinding::new(
+            "shift-right",
+            TextInputSelectRight,
+            Some(FRAME_TEXT_INPUT_CONTEXT),
+        ),
+        KeyBinding::new("home", TextInputHome, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("end", TextInputEnd, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-left", TextInputHome, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-right", TextInputEnd, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-a", TextInputSelectAll, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-c", TextInputCopy, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-x", TextInputCut, Some(FRAME_TEXT_INPUT_CONTEXT)),
+        KeyBinding::new("cmd-v", TextInputPaste, Some(FRAME_TEXT_INPUT_CONTEXT)),
+    ]);
     cx.set_menus(vec![Menu {
         name: name.into(),
         items: vec![MenuItem::action("Quit", Quit)],
@@ -4316,18 +5348,6 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn key_down_event(key: &str, key_char: Option<&str>) -> KeyDownEvent {
-        KeyDownEvent {
-            keystroke: gpui::Keystroke {
-                key: key.to_string(),
-                key_char: key_char.map(str::to_string),
-                ..gpui::Keystroke::default()
-            },
-            is_held: false,
-            prefer_character_input: false,
-        }
-    }
-
     mod frame_root_imports {
         use super::*;
 
@@ -4366,11 +5386,6 @@ mod tests {
 
     mod frame_root_conversion {
         use super::*;
-
-        #[test]
-        fn suggested_output_file_name_replaces_any_existing_extension() {
-            assert_eq!(suggested_output_file_name("final.mov", "mp4"), "final.mp4");
-        }
 
         #[test]
         fn queue_selected_conversion_tasks_marks_pending_file_as_queued() {
@@ -4495,31 +5510,47 @@ mod tests {
         }
 
         #[test]
-        fn max_concurrency_key_input_accepts_digits() {
-            let mut root = FrameRoot::new();
-            root.max_concurrency_draft.clear();
-
-            assert!(root.handle_max_concurrency_key(&key_down_event("4", Some("4"))));
-
-            assert_eq!(root.max_concurrency_draft, "4");
-        }
-
-        #[test]
-        fn max_concurrency_key_input_handles_backspace() {
+        fn max_concurrency_input_inserts_digits_at_selection() {
             let mut root = FrameRoot::new();
             root.max_concurrency_draft = "12".to_string();
+            root.max_concurrency_input.selected_range = 1..1;
 
-            assert!(root.handle_max_concurrency_key(&key_down_event("backspace", None)));
+            assert!(root.replace_text_input_range(
+                FrameTextInputKind::MaxConcurrency,
+                None,
+                "9",
+                None,
+                false,
+            ));
 
-            assert_eq!(root.max_concurrency_draft, "1");
+            assert_eq!(root.max_concurrency_draft, "192");
+            assert_eq!(root.max_concurrency_input.selected_range, 2..2);
         }
 
         #[test]
-        fn max_concurrency_key_input_enter_applies_live_controller_limit() {
+        fn max_concurrency_input_deletes_selected_range() {
+            let mut root = FrameRoot::new();
+            root.max_concurrency_draft = "12".to_string();
+            root.max_concurrency_input.selected_range = 1..2;
+
+            assert!(root.replace_text_input_range(
+                FrameTextInputKind::MaxConcurrency,
+                None,
+                "",
+                None,
+                false,
+            ));
+
+            assert_eq!(root.max_concurrency_draft, "1");
+            assert_eq!(root.max_concurrency_input.selected_range, 1..1);
+        }
+
+        #[test]
+        fn max_concurrency_apply_updates_live_controller_limit() {
             let mut root = FrameRoot::new();
             root.max_concurrency_draft = "4".to_string();
 
-            assert!(root.handle_max_concurrency_key(&key_down_event("enter", None)));
+            assert!(root.apply_max_concurrency_draft());
 
             assert_eq!(root.max_concurrency, 4);
             assert_eq!(
@@ -4527,6 +5558,57 @@ mod tests {
                     .current_max_concurrency()
                     .expect("max concurrency should be readable"),
                 4
+            );
+        }
+
+        #[test]
+        fn output_name_input_appends_text_at_selection() {
+            let mut root = FrameRoot::new();
+            root.file_queue
+                .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+            let len = root
+                .file_queue
+                .selected_file()
+                .map_or(0, |file| file.output_name.len());
+            root.output_name_input.selected_range = len..len;
+
+            assert!(root.replace_text_input_range(
+                FrameTextInputKind::OutputName,
+                None,
+                "x",
+                None,
+                false,
+            ));
+
+            assert_eq!(
+                root.file_queue
+                    .selected_file()
+                    .map(|file| file.output_name.as_str()),
+                Some("one_convertedx")
+            );
+        }
+
+        #[test]
+        fn output_name_input_delete_can_leave_field_empty() {
+            let mut root = FrameRoot::new();
+            root.file_queue
+                .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+            root.file_queue.update_selected_output_name("a");
+            root.output_name_input.selected_range = 0..1;
+
+            assert!(root.replace_text_input_range(
+                FrameTextInputKind::OutputName,
+                None,
+                "",
+                None,
+                false,
+            ));
+
+            assert_eq!(
+                root.file_queue
+                    .selected_file()
+                    .map(|file| file.output_name.as_str()),
+                Some("")
             );
         }
     }
@@ -5002,6 +6084,7 @@ mod tests {
                 metadata_error: None,
                 settings_disabled: false,
                 output_name: "",
+                output_name_focus: None,
             }
         }
 
@@ -5182,8 +6265,15 @@ mod tests {
         fn max_concurrency_runtime_settings_has_no_stepper_actions() {
             let mut root = FrameRoot::new();
             root.max_concurrency_draft = "1".to_string();
+            root.max_concurrency_input.selected_range = 1..1;
 
-            assert!(!root.handle_max_concurrency_key(&key_down_event("-", Some("-"))));
+            assert!(!root.replace_text_input_range(
+                FrameTextInputKind::MaxConcurrency,
+                None,
+                "-",
+                None,
+                false,
+            ));
             assert_eq!(root.max_concurrency_draft, "1");
         }
     }

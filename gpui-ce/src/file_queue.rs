@@ -389,6 +389,20 @@ impl FileQueue {
         true
     }
 
+    pub fn set_selected_output_name_from_input(&mut self, value: &str) -> bool {
+        let Some(file) = self.selected_file_mut() else {
+            return false;
+        };
+
+        let next_output_name = sanitize_output_name(value);
+        if file.output_name == next_output_name {
+            return false;
+        }
+
+        file.output_name = next_output_name;
+        true
+    }
+
     pub fn queue_selected_pending_conversions(&mut self) -> Vec<FileItem> {
         let mut pending_files = Vec::new();
 
@@ -1064,6 +1078,33 @@ mod tests {
             assert_eq!(
                 queue.selected_file().map(|file| file.output_name.as_str()),
                 Some("one_converted")
+            );
+        }
+
+        #[test]
+        fn set_selected_output_name_from_input_allows_empty_value() {
+            let mut queue = FileQueue::new();
+            queue.add_file(sample_file("first", "/tmp/one.mp4", 10));
+            queue.update_selected_output_name("custom");
+
+            assert!(queue.set_selected_output_name_from_input(""));
+
+            assert_eq!(
+                queue.selected_file().map(|file| file.output_name.as_str()),
+                Some("")
+            );
+        }
+
+        #[test]
+        fn set_selected_output_name_from_input_sanitizes_path_segments() {
+            let mut queue = FileQueue::new();
+            queue.add_file(sample_file("first", "/tmp/one.mp4", 10));
+
+            assert!(queue.set_selected_output_name_from_input("/tmp/export/final.mov"));
+
+            assert_eq!(
+                queue.selected_file().map(|file| file.output_name.as_str()),
+                Some("final.mov")
             );
         }
 
