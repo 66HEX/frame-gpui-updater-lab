@@ -42,11 +42,12 @@ use frame_gpui_ce::{
     theme, visual_fixture_from_env_value,
 };
 use gpui::{
-    App, Bounds, BoxShadow, ClickEvent, Context, DragMoveEvent, ExternalPaths, FontWeight,
-    InteractiveElement, IntoElement, KeyBinding, Menu, MenuItem, PathPromptOptions, Pixels, Render,
-    Rgba, SharedString, StatefulInteractiveElement, TitlebarOptions, UniformListScrollHandle,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea, WindowDecorations,
-    WindowOptions, actions, div, hsla, point, prelude::*, px, relative, size, svg, uniform_list,
+    App, Bounds, BoxShadow, ClickEvent, Context, DragMoveEvent, ExternalPaths, FocusHandle,
+    FontWeight, InteractiveElement, IntoElement, KeyBinding, KeyDownEvent, Menu, MenuItem,
+    PathPromptOptions, Pixels, Render, Rgba, SharedString, StatefulInteractiveElement,
+    TitlebarOptions, UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowControlArea, WindowDecorations, WindowOptions, actions, div, hsla, point, prelude::*, px,
+    relative, size, svg, uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
@@ -62,7 +63,9 @@ actions!(frame_gpui_ce, [Quit]);
 
 const FILE_LIST_ACTIONS_WIDTH: f32 = 64.0;
 const FILE_LIST_ACTION_BUTTON_SIZE: f32 = 24.0;
-const FILE_LIST_CHECKBOX_SIZE: f32 = 12.0;
+const FILE_LIST_ACTION_ICON_SIZE: f32 = 16.0;
+const FILE_LIST_CHECKBOX_SIZE: f32 = 14.0;
+const FILE_LIST_CHECK_ICON_SIZE: f32 = 12.0;
 const LOG_LINE_NUMBER_WIDTH: f32 = 32.0;
 const LOG_LINE_HEIGHT: f32 = 24.0;
 const TRAFFIC_LIGHT_GROUP: &str = "titlebar-traffic-lights";
@@ -92,6 +95,7 @@ struct FrameRoot {
     max_concurrency: usize,
     max_concurrency_draft: String,
     max_concurrency_error: Option<String>,
+    app_settings_value_focus: Option<FocusHandle>,
     source_metadata: SourceMetadataStore,
     conversion_processes: ConversionProcessController,
     preview_crop_file_id: Option<String>,
@@ -143,6 +147,7 @@ impl FrameRoot {
             max_concurrency: DEFAULT_MAX_CONCURRENCY,
             max_concurrency_draft: DEFAULT_MAX_CONCURRENCY.to_string(),
             max_concurrency_error: None,
+            app_settings_value_focus: None,
             source_metadata: SourceMetadataStore::default(),
             conversion_processes: ConversionProcessController::default(),
             preview_crop_file_id: None,
@@ -431,25 +436,41 @@ impl FrameRoot {
     fn close_app_settings(&mut self) {
         self.is_settings_open = false;
         self.max_concurrency_error = None;
+        self.app_settings_value_focus = None;
     }
 
-    fn increment_max_concurrency_draft(&mut self) -> bool {
-        let value = self
-            .parsed_max_concurrency_draft()
-            .unwrap_or(self.max_concurrency);
-        self.max_concurrency_draft = value.saturating_add(1).to_string();
-        self.max_concurrency_error = None;
-        true
+    fn handle_max_concurrency_key(&mut self, event: &KeyDownEvent) -> bool {
+        match event.keystroke.key.as_str() {
+            "backspace" => {
+                self.max_concurrency_draft.pop();
+                self.max_concurrency_error = None;
+                true
+            }
+            "escape" => {
+                self.max_concurrency_draft = self.max_concurrency.to_string();
+                self.max_concurrency_error = None;
+                true
+            }
+            "enter" => self.apply_max_concurrency_draft(),
+            _ => event
+                .keystroke
+                .key_char
+                .as_deref()
+                .or(Some(event.keystroke.key.as_str()))
+                .and_then(max_concurrency_digit_from_key)
+                .is_some_and(|digit| {
+                    self.push_max_concurrency_digit(digit);
+                    true
+                }),
+        }
     }
 
-    fn decrement_max_concurrency_draft(&mut self) -> bool {
-        let value = self
-            .parsed_max_concurrency_draft()
-            .unwrap_or(self.max_concurrency);
-        let next = value.saturating_sub(1).max(1);
-        self.max_concurrency_draft = next.to_string();
+    fn push_max_concurrency_digit(&mut self, digit: char) {
+        if self.max_concurrency_draft == "0" {
+            self.max_concurrency_draft.clear();
+        }
+        self.max_concurrency_draft.push(digit);
         self.max_concurrency_error = None;
-        true
     }
 
     fn apply_max_concurrency_draft(&mut self) -> bool {
@@ -1044,6 +1065,12 @@ fn suggested_output_file_name(output_name: &str, container: &str) -> String {
         .map_or_else(|| format!("output_converted.{container}"), str::to_string)
 }
 
+fn max_concurrency_digit_from_key(key: &str) -> Option<char> {
+    let mut chars = key.chars();
+    let digit = chars.next()?;
+    (chars.next().is_none() && digit.is_ascii_digit()).then_some(digit)
+}
+
 impl Render for FrameRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.native_titlebar_controls_hidden {
@@ -1112,10 +1139,15 @@ impl Render for FrameRoot {
             .child(content);
 
         if self.is_settings_open {
+            let value_focus = self
+                .app_settings_value_focus
+                .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                .clone();
             root = root.child(app_settings_sheet(
                 self.max_concurrency,
                 &self.max_concurrency_draft,
                 self.max_concurrency_error.as_deref(),
+                &value_focus,
                 cx,
             ));
         }
@@ -1209,6 +1241,7 @@ fn app_settings_sheet(
     current_max_concurrency: usize,
     draft_max_concurrency: &str,
     error: Option<&str>,
+    value_focus: &FocusHandle,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let draft_is_dirty = draft_max_concurrency.trim() != current_max_concurrency.to_string();
@@ -1258,7 +1291,7 @@ fn app_settings_sheet(
                         .text_color(color(theme::FOREGROUND))
                         .child("SETTINGS")
                         .child(
-                            app_settings_icon_button("app-settings-close", "X", true).on_click(
+                            app_settings_close_button().on_click(
                                 cx.listener(|root, _: &ClickEvent, _window, cx| {
                                     cx.stop_propagation();
                                     root.close_app_settings();
@@ -1280,6 +1313,7 @@ fn app_settings_sheet(
                                 .child(app_settings_concurrency_control(
                                     draft_max_concurrency,
                                     draft_is_dirty,
+                                    value_focus,
                                     cx,
                                 ))
                                 .child(settings_hint_text(
@@ -1301,47 +1335,18 @@ fn app_settings_sheet(
 fn app_settings_concurrency_control(
     draft_max_concurrency: &str,
     can_apply: bool,
+    value_focus: &FocusHandle,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
         .flex()
         .items_center()
         .gap_2()
-        .child(
-            app_settings_icon_button("app-settings-max-concurrency-minus", "-", true).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
-                    cx.stop_propagation();
-                    if root.decrement_max_concurrency_draft() {
-                        cx.notify();
-                    }
-                }),
-            ),
-        )
-        .child(
-            div()
-                .id("app-settings-max-concurrency-value")
-                .h(px(SETTINGS_CONTROL_HEIGHT))
-                .flex_1()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(theme::RADIUS_SM))
-                .bg(color(theme::BACKGROUND))
-                .px(px(10.0))
-                .text_color(color(theme::FOREGROUND))
-                .shadow(input_highlight_shadows())
-                .child(draft_max_concurrency.to_string()),
-        )
-        .child(
-            app_settings_icon_button("app-settings-max-concurrency-plus", "+", true).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
-                    cx.stop_propagation();
-                    if root.increment_max_concurrency_draft() {
-                        cx.notify();
-                    }
-                }),
-            ),
-        )
+        .child(app_settings_value_field(
+            draft_max_concurrency,
+            value_focus,
+            cx,
+        ))
         .child(app_settings_apply_button(can_apply).on_click(cx.listener(
             move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -1352,15 +1357,50 @@ fn app_settings_concurrency_control(
         )))
 }
 
-fn app_settings_icon_button(
-    id: &'static str,
-    label: &'static str,
-    enabled: bool,
+fn app_settings_value_field(
+    draft_max_concurrency: &str,
+    value_focus: &FocusHandle,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Ghost, false, enabled);
+    let focus_for_click = value_focus.clone();
 
     div()
-        .id(id)
+        .id("app-settings-max-concurrency-value")
+        .h(px(SETTINGS_CONTROL_HEIGHT))
+        .flex_1()
+        .flex()
+        .items_center()
+        .rounded(px(theme::RADIUS_SM))
+        .bg(color(theme::BACKGROUND))
+        .px(px(10.0))
+        .text_color(if draft_max_concurrency.is_empty() {
+            color(theme::FRAME_GRAY_600)
+        } else {
+            color(theme::FOREGROUND)
+        })
+        .shadow(input_highlight_shadows())
+        .track_focus(value_focus)
+        .cursor_text()
+        .focus(|style| style.bg(color(theme::FRAME_GRAY_100)))
+        .hover(|style| style.bg(color(theme::FRAME_GRAY_100)))
+        .on_click(cx.listener(move |_, _: &ClickEvent, window, cx| {
+            cx.stop_propagation();
+            focus_for_click.focus(window, cx);
+        }))
+        .on_key_down(cx.listener(|root, event: &KeyDownEvent, _window, cx| {
+            if root.handle_max_concurrency_key(event) {
+                cx.stop_propagation();
+                cx.notify();
+            }
+        }))
+        .child(draft_max_concurrency.to_string())
+}
+
+fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
+    let colors = button_colors(ButtonVariant::Ghost, false, true);
+
+    div()
+        .id("app-settings-close")
         .w(px(SETTINGS_CONTROL_HEIGHT))
         .h(px(SETTINGS_CONTROL_HEIGHT))
         .flex()
@@ -1368,19 +1408,18 @@ fn app_settings_icon_button(
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
         .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
         .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
+        .hover(move |style| {
+            style
+                .bg(color(colors.hover_background))
+                .text_color(color(colors.hover_foreground))
+                .cursor_pointer()
         })
-        .child(label)
+        .active(move |style| style.bg(color(colors.active_background)))
+        .child(icon_svg_inherit(
+            assets::ICON_CLOSE,
+            FILE_LIST_ACTION_ICON_SIZE,
+        ))
 }
 
 fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::Div> {
@@ -1739,6 +1778,10 @@ fn icon_svg(path: &'static str, size: f32, icon_color: Rgba) -> impl IntoElement
         .w(px(size))
         .h(px(size))
         .text_color(icon_color)
+}
+
+fn icon_svg_inherit(path: &'static str, size: f32) -> impl IntoElement {
+    svg().path(path).w(px(size)).h(px(size))
 }
 
 fn parse_hex(hex: &str) -> Rgba {
@@ -2654,8 +2697,8 @@ fn preview_zoom_toolbar(state: &PreviewShellState) -> gpui::Div {
         .bg(color(theme::BACKGROUND))
         .p(px(4.0))
         .shadow(card_surface_shadows())
-        .child(preview_tool_button(assets::ICON_ZOOM_OUT, false, enabled))
-        .child(preview_tool_button(assets::ICON_ZOOM_IN, false, enabled))
+        .child(preview_tool_button(assets::ICON_MINUS, false, enabled))
+        .child(preview_tool_button(assets::ICON_PLUS, false, enabled))
 }
 
 fn preview_toolbar_separator() -> gpui::Div {
@@ -3415,7 +3458,7 @@ fn settings_track_header(label: String) -> gpui::Div {
                 .h(px(1.0))
                 .flex_1()
                 .bg(color(theme::BACKGROUND))
-                .shadow(input_highlight_shadows()),
+                .shadow(horizontal_separator_shadows()),
         )
 }
 
@@ -3433,7 +3476,7 @@ fn settings_section_label(label: &'static str) -> gpui::Div {
                 .h(px(1.0))
                 .w_full()
                 .bg(color(theme::BACKGROUND))
-                .shadow(input_highlight_shadows()),
+                .shadow(horizontal_separator_shadows()),
         )
 }
 
@@ -3748,7 +3791,7 @@ fn file_list_body(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> impl IntoEl
                 .justify_center()
                 .text_size(px(theme::TEXT_ROW_SIZE))
                 .text_color(color(theme::FRAME_GRAY_600))
-                .child("Drop files or use Add Source"),
+                .child("DROP FILES OR USE ADD SOURCE"),
         );
     }
 
@@ -3874,7 +3917,7 @@ fn row_actions_cell(
         .flex()
         .items_center()
         .justify_end()
-        .gap_1()
+        .gap_2()
         .opacity(0.0)
         .group_hover(group_name, |style| style.opacity(1.0))
         .on_click(cx.listener(|_, _: &ClickEvent, _window, cx| {
@@ -3884,72 +3927,134 @@ fn row_actions_cell(
     if actions.can_pause {
         let id = file_id.clone();
         cell = cell.child(
-            row_action_button("||", true)
-                .id(element_id("file-row-action-pause", &id))
-                .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    cx.stop_propagation();
-                    if root.pause_conversion_task(&id) {
-                        cx.notify();
-                    }
-                })),
+            row_action_button(
+                element_id("file-row-action-pause", &id),
+                assets::ICON_PAUSE,
+                true,
+                RowActionTone::Normal,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                cx.stop_propagation();
+                if root.pause_conversion_task(&id) {
+                    cx.notify();
+                }
+            })),
         );
     }
     if actions.can_resume {
         let id = file_id.clone();
         cell = cell.child(
-            row_action_button(">", true)
-                .id(element_id("file-row-action-resume", &id))
-                .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    cx.stop_propagation();
-                    if root.resume_conversion_task(&id) {
-                        cx.notify();
-                    }
-                })),
+            row_action_button(
+                element_id("file-row-action-resume", &id),
+                assets::ICON_PLAY,
+                true,
+                RowActionTone::Normal,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                cx.stop_propagation();
+                if root.resume_conversion_task(&id) {
+                    cx.notify();
+                }
+            })),
         );
     }
 
     if actions.can_delete {
         let id = file_id;
         cell.child(
-            row_action_button("X", true)
-                .id(element_id("file-row-action-delete", &id))
-                .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    cx.stop_propagation();
-                    if root.remove_file_from_queue(&id) {
-                        cx.notify();
-                    }
-                })),
+            row_action_button(
+                element_id("file-row-action-delete", &id),
+                assets::ICON_TRASH,
+                true,
+                RowActionTone::Destructive,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                cx.stop_propagation();
+                if root.remove_file_from_queue(&id) {
+                    cx.notify();
+                }
+            })),
         )
     } else {
-        cell.child(row_action_button("X", false))
+        cell.child(row_action_button(
+            element_id("file-row-action-delete-disabled", &file_id),
+            assets::ICON_TRASH,
+            false,
+            RowActionTone::Destructive,
+        ))
     }
 }
 
-fn row_action_button(label: &'static str, enabled: bool) -> gpui::Div {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RowActionTone {
+    Normal,
+    Destructive,
+}
+
+fn row_action_button(
+    id: String,
+    icon: &'static str,
+    enabled: bool,
+    tone: RowActionTone,
+) -> gpui::Stateful<gpui::Div> {
+    let (background, hover_background, active_background, foreground, hover_foreground, opacity) =
+        match (tone, enabled) {
+            (RowActionTone::Normal, true) => (
+                theme::TRANSPARENT,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_GRAY_600,
+                theme::FOREGROUND,
+                1.0,
+            ),
+            (RowActionTone::Normal, false) => (
+                theme::TRANSPARENT,
+                theme::TRANSPARENT,
+                theme::TRANSPARENT,
+                theme::FRAME_GRAY_600,
+                theme::FRAME_GRAY_600,
+                0.5,
+            ),
+            (RowActionTone::Destructive, true) => (
+                theme::TRANSPARENT,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_RED,
+                theme::FRAME_RED,
+                1.0,
+            ),
+            (RowActionTone::Destructive, false) => (
+                theme::FRAME_GRAY_100,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_GRAY_100,
+                theme::FRAME_RED.with_alpha(0.5),
+                theme::FRAME_RED.with_alpha(0.5),
+                1.0,
+            ),
+        };
+
     div()
+        .id(id)
         .w(px(FILE_LIST_ACTION_BUTTON_SIZE))
         .h(px(FILE_LIST_ACTION_BUTTON_SIZE))
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(theme::RADIUS_MD))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .bg(if enabled {
-            color(theme::TRANSPARENT)
-        } else {
-            color(theme::FRAME_GRAY_100)
-        })
-        .text_color(if enabled {
-            color(theme::FOREGROUND)
-        } else {
-            color(theme::FRAME_GRAY_400)
-        })
+        .rounded(px(theme::RADIUS_SM))
+        .bg(color(background))
+        .text_color(color(foreground))
+        .opacity(opacity)
         .when(enabled, |this| {
-            this.hover(|style| style.bg(color(theme::FRAME_GRAY_100)).cursor_pointer())
+            this.hover(move |style| {
+                style
+                    .bg(color(hover_background))
+                    .text_color(color(hover_foreground))
+                    .cursor_pointer()
+            })
+            .active(move |style| style.bg(color(active_background)))
         })
-        .child(label)
+        .child(icon_svg_inherit(icon, FILE_LIST_ACTION_ICON_SIZE))
 }
-
 fn row_checkbox_control(
     file_id: String,
     is_checked: bool,
@@ -4005,6 +4110,12 @@ fn checkbox_indicator(is_checked: bool, is_indeterminate: bool, is_enabled: bool
                 .rounded(px(theme::RADIUS_XS))
                 .bg(color(theme::FOREGROUND)),
         );
+    } else if is_checked {
+        indicator = indicator.child(icon_svg(
+            assets::ICON_CHECK,
+            FILE_LIST_CHECK_ICON_SIZE,
+            color(theme::FOREGROUND),
+        ));
     }
 
     indicator
@@ -4205,6 +4316,18 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn key_down_event(key: &str, key_char: Option<&str>) -> KeyDownEvent {
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                key: key.to_string(),
+                key_char: key_char.map(str::to_string),
+                ..gpui::Keystroke::default()
+            },
+            is_held: false,
+            prefer_character_input: false,
+        }
+    }
+
     mod frame_root_imports {
         use super::*;
 
@@ -4372,13 +4495,39 @@ mod tests {
         }
 
         #[test]
-        fn max_concurrency_stepper_never_decrements_below_one() {
+        fn max_concurrency_key_input_accepts_digits() {
             let mut root = FrameRoot::new();
-            root.max_concurrency_draft = "1".to_string();
+            root.max_concurrency_draft.clear();
 
-            root.decrement_max_concurrency_draft();
+            assert!(root.handle_max_concurrency_key(&key_down_event("4", Some("4"))));
+
+            assert_eq!(root.max_concurrency_draft, "4");
+        }
+
+        #[test]
+        fn max_concurrency_key_input_handles_backspace() {
+            let mut root = FrameRoot::new();
+            root.max_concurrency_draft = "12".to_string();
+
+            assert!(root.handle_max_concurrency_key(&key_down_event("backspace", None)));
 
             assert_eq!(root.max_concurrency_draft, "1");
+        }
+
+        #[test]
+        fn max_concurrency_key_input_enter_applies_live_controller_limit() {
+            let mut root = FrameRoot::new();
+            root.max_concurrency_draft = "4".to_string();
+
+            assert!(root.handle_max_concurrency_key(&key_down_event("enter", None)));
+
+            assert_eq!(root.max_concurrency, 4);
+            assert_eq!(
+                root.conversion_processes
+                    .current_max_concurrency()
+                    .expect("max concurrency should be readable"),
+                4
+            );
         }
     }
 
@@ -5015,6 +5164,27 @@ mod tests {
                 timeline_slider_percent_from_bounds(point(px(140.0), px(0.0)), bounds),
                 1.0
             );
+        }
+    }
+
+    mod visual_contract {
+        use super::*;
+
+        #[test]
+        fn file_list_controls_match_original_svelte_sizes() {
+            assert_eq!(FILE_LIST_ACTION_BUTTON_SIZE, 24.0);
+            assert_eq!(FILE_LIST_ACTION_ICON_SIZE, 16.0);
+            assert_eq!(FILE_LIST_CHECKBOX_SIZE, 14.0);
+            assert_eq!(FILE_LIST_CHECK_ICON_SIZE, 12.0);
+        }
+
+        #[test]
+        fn max_concurrency_runtime_settings_has_no_stepper_actions() {
+            let mut root = FrameRoot::new();
+            root.max_concurrency_draft = "1".to_string();
+
+            assert!(!root.handle_max_concurrency_key(&key_down_event("-", Some("-"))));
+            assert_eq!(root.max_concurrency_draft, "1");
         }
     }
 }
