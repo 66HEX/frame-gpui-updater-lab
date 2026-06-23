@@ -1,7 +1,10 @@
 use frame_core::events::ConversionEvent;
 use frame_gpui_ce::{
     ActiveView, CONTENT_PADDING, FILE_LIST_ROW_SPAN, FILE_ROW_HEIGHT, FrameAppState,
-    LEFT_COLUMN_SPAN, LEFT_GRID_ROWS, PANEL_HEADER_HEIGHT, PREVIEW_ROW_SPAN, RIGHT_COLUMN_SPAN,
+    LEFT_COLUMN_SPAN, LEFT_GRID_ROWS, PANEL_HEADER_HEIGHT, PREVIEW_PANEL_PADDING,
+    PREVIEW_PLAYHEAD_HEIGHT, PREVIEW_ROW_SPAN, PREVIEW_TIMELINE_CONTROL_HEIGHT,
+    PREVIEW_TIMELINE_HANDLE_WIDTH, PREVIEW_TIMELINE_TOP_MARGIN, PREVIEW_TOOLBAR_BUTTON_SIZE,
+    PREVIEW_TOOLBAR_ICON_SIZE, PREVIEW_TOOLBAR_OFFSET, PREVIEW_TRACK_HEIGHT, RIGHT_COLUMN_SPAN,
     SETTINGS_CONTROL_HEIGHT, SETTINGS_PANEL_PADDING, SETTINGS_TAB_BUTTON_SIZE,
     SETTINGS_TAB_ICON_SIZE, TITLEBAR_ACTION_ICON_SIZE, TITLEBAR_BUTTON_HEIGHT,
     TITLEBAR_DIVIDER_HEIGHT, TITLEBAR_HEIGHT, TITLEBAR_ICON_BUTTON_SIZE, TITLEBAR_ICON_SIZE,
@@ -15,11 +18,16 @@ use frame_gpui_ce::{
         format_file_size,
     },
     format_total_size,
+    preview::{
+        MediaSnapshot, MetadataStatus as PreviewMetadataStatus, PreviewControlAvailability,
+        PreviewControlInput, PreviewMediaKind, PreviewPlaybackState, SourceMediaKind, format_time,
+        parse_time_to_seconds, preview_control_availability,
+    },
     settings::{
-        ConversionConfig, SettingsTab, SourceInfoSection, SourceMetadata, apply_output_container,
-        apply_processing_mode, normalize_output_config, output_container_options,
-        output_processing_mode_options, resolve_active_settings_tab, source_info_sections,
-        visible_settings_tabs,
+        ConversionConfig, SettingsTab, SourceInfoSection, SourceKind, SourceMetadata,
+        apply_output_container, apply_processing_mode, normalize_output_config,
+        output_container_options, output_processing_mode_options, resolve_active_settings_tab,
+        source_info_sections, visible_settings_tabs,
     },
     source_metadata::{
         MetadataStatus, SourceMetadataEntry, SourceMetadataStore, probe_source_metadata,
@@ -101,10 +109,14 @@ impl FrameRoot {
     }
 
     fn apply_visual_fixture(&mut self, fixture: Option<VisualFixture>) {
-        let Some(VisualFixture::LogsActive) = fixture else {
-            return;
-        };
+        match fixture {
+            Some(VisualFixture::LogsActive) => self.apply_logs_active_fixture(),
+            Some(VisualFixture::PreviewReady) => self.apply_preview_ready_fixture(),
+            None => {}
+        }
+    }
 
+    fn apply_logs_active_fixture(&mut self) {
         self.active_view = ActiveView::Logs;
         self.file_queue.add_file(FileItem::from_path(
             "fixture-video",
@@ -128,6 +140,31 @@ impl FrameRoot {
                 ConversionEvent::log("fixture-video", line),
             );
         }
+    }
+
+    fn apply_preview_ready_fixture(&mut self) {
+        self.active_view = ActiveView::Workspace;
+        self.file_queue.add_file(FileItem::from_path(
+            "fixture-preview",
+            "/tmp/source_render.mov",
+            1_572_864_000,
+        ));
+        self.source_metadata.mark_ready(
+            "fixture-preview".to_string(),
+            SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                duration: Some("90.400000".to_string()),
+                bitrate: Some("12000000".to_string()),
+                video_codec: Some("prores".to_string()),
+                audio_codec: Some("aac".to_string()),
+                resolution: Some("3840x2160".to_string()),
+                frame_rate: Some(24.0),
+                width: Some(3840),
+                height: Some(2160),
+                video_bitrate_kbps: Some(12_000.0),
+                ..SourceMetadata::default()
+            },
+        );
     }
 
     fn app_state(&self) -> FrameAppState {
@@ -578,6 +615,7 @@ fn titlebar_segment(
                 style
             }
         })
+        .active(move |style| style.bg(color(colors.active_background)))
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             if root.active_view != view {
                 root.active_view = view;
@@ -754,15 +792,534 @@ fn workspace_view(
                 .grid_rows(LEFT_GRID_ROWS)
                 .gap(px(WORKSPACE_GAP))
                 .size_full()
-                .child(
-                    panel("PREVIEW")
-                        .row_span(PREVIEW_ROW_SPAN)
-                        .items_center()
-                        .justify_center(),
-                )
+                .child(preview_panel(file_queue, settings).row_span(PREVIEW_ROW_SPAN))
                 .child(file_list_panel(file_queue, cx).row_span(FILE_LIST_ROW_SPAN)),
         )
         .child(settings_panel(settings, cx).col_span(RIGHT_COLUMN_SPAN))
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PreviewShellState {
+    selected_file_name: Option<String>,
+    metadata_status: PreviewMetadataStatus,
+    metadata_error: Option<String>,
+    controls_disabled: bool,
+    availability: PreviewControlAvailability,
+    playback: PreviewPlaybackState,
+    duration_seconds: f64,
+}
+
+fn preview_panel(file_queue: &FileQueue, settings: SettingsRenderState<'_>) -> gpui::Div {
+    let state = preview_shell_state(file_queue.selected_file(), settings);
+
+    div()
+        .flex()
+        .flex_col()
+        .overflow_hidden()
+        .card_surface()
+        .p(px(PREVIEW_PANEL_PADDING))
+        .child(preview_viewport(&state))
+        .child(preview_timeline(&state))
+}
+
+fn preview_shell_state(
+    selected_file: Option<&FileItem>,
+    settings: SettingsRenderState<'_>,
+) -> PreviewShellState {
+    let metadata_status = preview_metadata_status(settings.metadata_status);
+    let source_media_kind = preview_source_media_kind(settings.metadata);
+    let availability = preview_control_availability(PreviewControlInput {
+        metadata_status,
+        source_media_kind,
+        controls_disabled: settings.settings_disabled,
+        processing_mode: settings.config.processing_mode,
+        container: Some(settings.config.container.as_str()),
+    });
+    let duration_seconds = preview_duration_seconds(settings.metadata);
+    let playback = preview_playback_state(availability.media_kind, duration_seconds);
+
+    PreviewShellState {
+        selected_file_name: selected_file.map(|file| file.name.clone()),
+        metadata_status,
+        metadata_error: settings.metadata_error.map(str::to_string),
+        controls_disabled: settings.settings_disabled,
+        availability,
+        playback,
+        duration_seconds,
+    }
+}
+
+fn preview_metadata_status(status: MetadataStatus) -> PreviewMetadataStatus {
+    match status {
+        MetadataStatus::Idle => PreviewMetadataStatus::Idle,
+        MetadataStatus::Loading => PreviewMetadataStatus::Loading,
+        MetadataStatus::Ready => PreviewMetadataStatus::Ready,
+        MetadataStatus::Error => PreviewMetadataStatus::Error,
+    }
+}
+
+fn preview_source_media_kind(metadata: Option<&SourceMetadata>) -> Option<SourceMediaKind> {
+    metadata.map(|metadata| match metadata.source_kind() {
+        SourceKind::Video => SourceMediaKind::Video,
+        SourceKind::Audio => SourceMediaKind::Audio,
+        SourceKind::Image => SourceMediaKind::Image,
+    })
+}
+
+fn preview_duration_seconds(metadata: Option<&SourceMetadata>) -> f64 {
+    let Some(raw) = metadata.and_then(|metadata| metadata.duration.as_deref()) else {
+        return 0.0;
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return 0.0;
+    }
+
+    let duration = if raw.contains(':') {
+        parse_time_to_seconds(raw)
+    } else {
+        raw.parse::<f64>().unwrap_or(0.0)
+    };
+
+    if duration.is_finite() && duration > 0.0 {
+        duration
+    } else {
+        0.0
+    }
+}
+
+fn preview_playback_state(
+    media_kind: PreviewMediaKind,
+    duration_seconds: f64,
+) -> PreviewPlaybackState {
+    let is_image = media_kind == PreviewMediaKind::Image;
+    let mut playback = PreviewPlaybackState::new(is_image);
+    if media_kind != PreviewMediaKind::Unknown && !is_image {
+        playback.sync_media(MediaSnapshot {
+            current_time: 0.0,
+            duration: duration_seconds,
+            paused: true,
+        });
+    }
+    playback
+}
+
+fn preview_viewport(state: &PreviewShellState) -> gpui::Div {
+    let mut viewport = div()
+        .relative()
+        .flex_1()
+        .min_h_0()
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .overflow_hidden()
+        .rounded(px(theme::RADIUS_MD))
+        .bg(parse_hex("#000000"))
+        .shadow(input_highlight_shadows())
+        .child(preview_viewport_content(state));
+
+    if preview_visual_controls_visible(state) {
+        viewport = viewport
+            .child(preview_toolbar(state))
+            .child(preview_zoom_toolbar(state));
+    }
+
+    viewport
+}
+
+fn preview_viewport_content(state: &PreviewShellState) -> gpui::Div {
+    let content = div()
+        .max_w(px(360.0))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap_3()
+        .text_center()
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(color(theme::FRAME_GRAY_600));
+
+    let Some(file_name) = state.selected_file_name.as_deref() else {
+        return content.child("Drop files or use Add Source");
+    };
+
+    match state.metadata_status {
+        PreviewMetadataStatus::Idle | PreviewMetadataStatus::Loading => {
+            content.child("Analyzing source...")
+        }
+        PreviewMetadataStatus::Error => {
+            let mut error = content
+                .text_color(color(theme::FRAME_RED))
+                .child("Preview unavailable");
+            if let Some(message) = state.metadata_error.as_deref() {
+                error = error.child(
+                    div()
+                        .max_w(px(320.0))
+                        .truncate()
+                        .text_color(color(theme::FRAME_GRAY_600))
+                        .child(message.to_string()),
+                );
+            }
+            error
+        }
+        PreviewMetadataStatus::Ready => {
+            if state.availability.media_kind == PreviewMediaKind::Unknown {
+                return content.child("Preview unavailable");
+            }
+
+            content
+                .child(preview_media_placeholder(state.availability.media_kind))
+                .child(
+                    div()
+                        .max_w(px(320.0))
+                        .truncate()
+                        .whitespace_nowrap()
+                        .text_color(color(theme::FOREGROUND))
+                        .child(file_name.to_string()),
+                )
+                .child(preview_media_kind_label(state.availability.media_kind))
+        }
+    }
+}
+
+fn preview_media_placeholder(media_kind: PreviewMediaKind) -> gpui::Div {
+    div()
+        .w(px(240.0))
+        .h(px(136.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(theme::RADIUS_MD))
+        .border_1()
+        .border_color(color(theme::FRAME_GRAY_200))
+        .bg(color(theme::BACKGROUND))
+        .shadow(input_highlight_shadows())
+        .child(icon_svg(
+            preview_media_icon(media_kind),
+            32.0,
+            color(theme::FRAME_GRAY_600),
+        ))
+}
+
+fn preview_media_icon(media_kind: PreviewMediaKind) -> &'static str {
+    match media_kind {
+        PreviewMediaKind::Video | PreviewMediaKind::Unknown => assets::ICON_FILE_VIDEO,
+        PreviewMediaKind::Audio => assets::ICON_MUSIC,
+        PreviewMediaKind::Image => assets::ICON_FILE_IMAGE,
+    }
+}
+
+fn preview_media_kind_label(media_kind: PreviewMediaKind) -> &'static str {
+    match media_kind {
+        PreviewMediaKind::Video => "VIDEO SOURCE",
+        PreviewMediaKind::Audio => "AUDIO SOURCE",
+        PreviewMediaKind::Image => "IMAGE SOURCE",
+        PreviewMediaKind::Unknown => "UNKNOWN SOURCE",
+    }
+}
+
+fn preview_visual_controls_visible(state: &PreviewShellState) -> bool {
+    state.availability.media_kind != PreviewMediaKind::Unknown
+        && !state.availability.hide_visual_controls
+}
+
+fn preview_visual_controls_enabled(state: &PreviewShellState) -> bool {
+    preview_visual_controls_visible(state) && !state.controls_disabled
+}
+
+fn preview_toolbar(state: &PreviewShellState) -> gpui::Div {
+    let transform_enabled = preview_visual_controls_enabled(state);
+    let overlay_enabled = transform_enabled && state.availability.overlay_available;
+
+    div()
+        .absolute()
+        .top(px(PREVIEW_TOOLBAR_OFFSET))
+        .left(px(PREVIEW_TOOLBAR_OFFSET))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .rounded(px(theme::RADIUS_MD))
+        .bg(color(theme::BACKGROUND))
+        .p(px(4.0))
+        .shadow(card_surface_shadows())
+        .child(preview_tool_button(
+            assets::ICON_ROTATE_CW,
+            false,
+            transform_enabled,
+        ))
+        .child(preview_tool_button(
+            assets::ICON_FLIP_HORIZONTAL,
+            false,
+            transform_enabled,
+        ))
+        .child(preview_tool_button(
+            assets::ICON_FLIP_VERTICAL,
+            false,
+            transform_enabled,
+        ))
+        .child(preview_toolbar_separator())
+        .child(preview_tool_button(
+            assets::ICON_CROP,
+            false,
+            transform_enabled,
+        ))
+        .child(preview_tool_button(
+            assets::ICON_FILE_IMAGE,
+            false,
+            overlay_enabled,
+        ))
+}
+
+fn preview_zoom_toolbar(state: &PreviewShellState) -> gpui::Div {
+    let enabled = preview_visual_controls_enabled(state);
+
+    div()
+        .absolute()
+        .right(px(PREVIEW_TOOLBAR_OFFSET))
+        .bottom(px(PREVIEW_TOOLBAR_OFFSET))
+        .flex()
+        .gap_2()
+        .rounded(px(theme::RADIUS_MD))
+        .bg(color(theme::BACKGROUND))
+        .p(px(4.0))
+        .shadow(card_surface_shadows())
+        .child(preview_tool_button(assets::ICON_ZOOM_OUT, false, enabled))
+        .child(preview_tool_button(assets::ICON_ZOOM_IN, false, enabled))
+}
+
+fn preview_toolbar_separator() -> gpui::Div {
+    div()
+        .h(px(1.0))
+        .w_full()
+        .bg(color(theme::BACKGROUND))
+        .shadow(horizontal_separator_shadows())
+}
+
+fn preview_tool_button(icon: &'static str, selected: bool, enabled: bool) -> gpui::Div {
+    let colors = button_colors(ButtonVariant::Secondary, selected, enabled);
+    let icon_color = if enabled {
+        color(colors.foreground)
+    } else {
+        color(theme::FRAME_GRAY_400)
+    };
+
+    div()
+        .w(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
+        .h(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(theme::RADIUS_SM))
+        .bg(if selected {
+            color(colors.background)
+        } else {
+            color(theme::TRANSPARENT)
+        })
+        .text_color(icon_color)
+        .when(selected, |this| this.shadow(button_highlight_shadows()))
+        .when(!enabled, |this| this.cursor_not_allowed())
+        .when(enabled, |this| {
+            this.hover(move |style| style.bg(color(colors.hover_background)).cursor_pointer())
+        })
+        .child(icon_svg(icon, PREVIEW_TOOLBAR_ICON_SIZE, icon_color))
+}
+
+fn preview_timeline(state: &PreviewShellState) -> gpui::Div {
+    let labels = preview_timeline_labels(state);
+    let trim_enabled = preview_trim_enabled(state);
+
+    div()
+        .mt(px(PREVIEW_TIMELINE_TOP_MARGIN))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap_4()
+        .child(
+            div()
+                .flex()
+                .gap_4()
+                .child(preview_timecode_field(
+                    "START TIME",
+                    labels.start,
+                    trim_enabled,
+                    128.0,
+                ))
+                .child(preview_timecode_field(
+                    "END TIME",
+                    labels.end,
+                    trim_enabled,
+                    128.0,
+                ))
+                .child(preview_timecode_field(
+                    "DURATION",
+                    labels.duration,
+                    false,
+                    104.0,
+                )),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(preview_timeline_label("TRIM"))
+                .child(preview_timeline_track(state)),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(preview_timeline_label(" "))
+                .child(preview_play_button(state)),
+        )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PreviewTimelineLabels {
+    start: String,
+    end: String,
+    duration: String,
+}
+
+fn preview_timeline_labels(state: &PreviewShellState) -> PreviewTimelineLabels {
+    if state.availability.media_kind == PreviewMediaKind::Image
+        || state.availability.media_kind == PreviewMediaKind::Unknown
+        || state.duration_seconds <= 0.0
+    {
+        return PreviewTimelineLabels {
+            start: "--:--:--.---".to_string(),
+            end: "--:--:--.---".to_string(),
+            duration: "--:--:--.---".to_string(),
+        };
+    }
+
+    PreviewTimelineLabels {
+        start: format_time(state.playback.start_value()),
+        end: format_time(state.playback.end_value()),
+        duration: format_time(state.playback.end_value() - state.playback.start_value()),
+    }
+}
+
+fn preview_trim_enabled(state: &PreviewShellState) -> bool {
+    !state.availability.trim_disabled && state.duration_seconds > 0.0
+}
+
+fn preview_timecode_field(
+    label: &'static str,
+    value: String,
+    enabled: bool,
+    width: f32,
+) -> gpui::Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(6.0))
+        .child(preview_timeline_label(label))
+        .child(
+            div()
+                .w(px(width))
+                .h(px(PREVIEW_TIMELINE_CONTROL_HEIGHT))
+                .flex()
+                .items_center()
+                .rounded(px(theme::RADIUS_SM))
+                .bg(color(theme::BACKGROUND))
+                .px(px(10.0))
+                .text_size(px(theme::TEXT_LABEL_SIZE))
+                .text_color(if enabled {
+                    color(theme::FOREGROUND)
+                } else {
+                    color(theme::FRAME_GRAY_600)
+                })
+                .shadow(input_highlight_shadows())
+                .child(value),
+        )
+}
+
+fn preview_timeline_label(label: &'static str) -> gpui::Div {
+    div()
+        .h(px(12.0))
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .text_color(color(theme::FRAME_GRAY_600))
+        .child(label)
+}
+
+fn preview_timeline_track(state: &PreviewShellState) -> gpui::Div {
+    let enabled = preview_trim_enabled(state);
+    let track_top = centered_offset(PREVIEW_TIMELINE_CONTROL_HEIGHT, PREVIEW_TRACK_HEIGHT);
+    let playhead_top = centered_offset(PREVIEW_TIMELINE_CONTROL_HEIGHT, PREVIEW_PLAYHEAD_HEIGHT);
+
+    div()
+        .relative()
+        .h(px(PREVIEW_TIMELINE_CONTROL_HEIGHT))
+        .w_full()
+        .opacity(if enabled { 1.0 } else { 0.5 })
+        .when(enabled, |this| this.cursor_pointer())
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .top(px(track_top))
+                .h(px(PREVIEW_TRACK_HEIGHT))
+                .rounded(px(1.5))
+                .bg(color(theme::FRAME_GRAY_100))
+                .shadow(input_highlight_shadows()),
+        )
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .top(px(track_top))
+                .h(px(PREVIEW_TRACK_HEIGHT))
+                .rounded(px(1.0))
+                .bg(color(theme::FOREGROUND)),
+        )
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .top(px(playhead_top))
+                .h(px(PREVIEW_PLAYHEAD_HEIGHT))
+                .w(px(1.0))
+                .bg(color(theme::FOREGROUND)),
+        )
+        .child(preview_timeline_handle(true, enabled))
+        .child(preview_timeline_handle(false, enabled))
+}
+
+fn preview_timeline_handle(is_start: bool, enabled: bool) -> gpui::Div {
+    let handle = div()
+        .absolute()
+        .top_0()
+        .h(px(PREVIEW_TIMELINE_CONTROL_HEIGHT))
+        .w(px(PREVIEW_TIMELINE_HANDLE_WIDTH))
+        .when(enabled, |this| this.cursor_ew_resize());
+
+    if is_start {
+        handle.left_0()
+    } else {
+        handle.right_0()
+    }
+}
+
+fn preview_play_button(state: &PreviewShellState) -> gpui::Div {
+    let enabled = preview_trim_enabled(state);
+    let icon = if state.playback.is_playing() {
+        assets::ICON_PAUSE
+    } else {
+        assets::ICON_PLAY
+    };
+
+    preview_tool_button(icon, false, enabled)
+}
+
+fn centered_offset(container: f32, child: f32) -> f32 {
+    ((container - child) / 2.0).max(0.0)
 }
 
 fn logs_view(
@@ -1028,6 +1585,7 @@ fn settings_tab_button(
                 }))
                 .cursor_pointer()
         })
+        .active(move |style| style.bg(color(colors.active_background)))
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             root.settings_active_tab = tab;
             cx.stop_propagation();
@@ -1776,15 +2334,6 @@ fn element_id(prefix: &str, id: &str) -> String {
     format!("{prefix}-{id}")
 }
 
-fn panel(label: &'static str) -> gpui::Div {
-    div()
-        .flex()
-        .card_surface()
-        .text_xs()
-        .text_color(color(theme::FRAME_GRAY_600))
-        .child(label)
-}
-
 trait FrameSurface {
     fn card_surface(self) -> Self;
 }
@@ -1976,6 +2525,30 @@ mod tests {
         }
     }
 
+    mod visual_fixtures {
+        use super::*;
+
+        #[test]
+        fn preview_ready_fixture_seeds_selected_video_metadata() {
+            let mut root = FrameRoot::new();
+
+            root.apply_visual_fixture(Some(VisualFixture::PreviewReady));
+
+            assert_eq!(root.active_view, ActiveView::Workspace);
+            assert_eq!(
+                root.file_queue
+                    .selected_file()
+                    .map(|file| file.name.as_str()),
+                Some("source_render.mov")
+            );
+            assert_eq!(
+                root.selected_source_metadata()
+                    .map(|metadata| metadata.source_kind()),
+                Some(SourceKind::Video)
+            );
+        }
+    }
+
     mod button_state_colors {
         use super::*;
 
@@ -2001,6 +2574,116 @@ mod tests {
             let colors = button_colors(ButtonVariant::Default, false, false);
 
             assert_eq!(colors.background, theme::FRAME_GRAY_400.with_alpha(0.10));
+        }
+    }
+
+    mod preview_shell {
+        use super::*;
+
+        fn settings_state<'a>(
+            config: &'a ConversionConfig,
+            metadata: Option<&'a SourceMetadata>,
+            status: MetadataStatus,
+        ) -> SettingsRenderState<'a> {
+            SettingsRenderState {
+                active_tab: SettingsTab::Source,
+                config,
+                metadata,
+                metadata_status: status,
+                metadata_error: None,
+                settings_disabled: false,
+                output_name: "",
+            }
+        }
+
+        #[test]
+        fn ready_video_metadata_populates_timeline_labels() {
+            let config = ConversionConfig::default();
+            let metadata = SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                duration: Some("90.4".to_string()),
+                ..SourceMetadata::default()
+            };
+            let file = FileItem::from_path("video", "/tmp/render.mov", 1024);
+
+            let state = preview_shell_state(
+                Some(&file),
+                settings_state(&config, Some(&metadata), MetadataStatus::Ready),
+            );
+            let labels = preview_timeline_labels(&state);
+
+            assert_eq!(state.availability.media_kind, PreviewMediaKind::Video);
+            assert!(preview_trim_enabled(&state));
+            assert_eq!(labels.start, "00:00:00.000");
+            assert_eq!(labels.end, "00:01:30.400");
+            assert_eq!(labels.duration, "00:01:30.400");
+        }
+
+        #[test]
+        fn image_metadata_uses_placeholder_timeline_labels() {
+            let config = ConversionConfig::default();
+            let metadata = SourceMetadata {
+                media_kind: Some(SourceKind::Image),
+                duration: Some("10.0".to_string()),
+                ..SourceMetadata::default()
+            };
+            let file = FileItem::from_path("image", "/tmp/still.png", 1024);
+
+            let state = preview_shell_state(
+                Some(&file),
+                settings_state(&config, Some(&metadata), MetadataStatus::Ready),
+            );
+            let labels = preview_timeline_labels(&state);
+
+            assert_eq!(state.availability.media_kind, PreviewMediaKind::Image);
+            assert!(state.availability.trim_disabled);
+            assert_eq!(labels.start, "--:--:--.---");
+            assert_eq!(labels.end, "--:--:--.---");
+            assert_eq!(labels.duration, "--:--:--.---");
+        }
+
+        #[test]
+        fn audio_metadata_hides_visual_controls() {
+            let config = ConversionConfig::default();
+            let metadata = SourceMetadata {
+                media_kind: Some(SourceKind::Audio),
+                duration: Some("00:00:12.500".to_string()),
+                ..SourceMetadata::default()
+            };
+
+            let state = preview_shell_state(
+                None,
+                settings_state(&config, Some(&metadata), MetadataStatus::Ready),
+            );
+
+            assert_eq!(state.availability.media_kind, PreviewMediaKind::Audio);
+            assert!(state.availability.hide_visual_controls);
+            assert!(!preview_visual_controls_visible(&state));
+            assert_eq!(preview_duration_seconds(Some(&metadata)), 12.5);
+        }
+
+        #[test]
+        fn loading_metadata_keeps_preview_unknown() {
+            let config = ConversionConfig::default();
+            let metadata = SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                duration: Some("90.0".to_string()),
+                ..SourceMetadata::default()
+            };
+
+            let state = preview_shell_state(
+                None,
+                settings_state(&config, Some(&metadata), MetadataStatus::Loading),
+            );
+
+            assert_eq!(state.availability.media_kind, PreviewMediaKind::Unknown);
+            assert!(state.availability.trim_disabled);
+        }
+
+        #[test]
+        fn centered_offset_never_returns_negative_values() {
+            assert_eq!(centered_offset(30.0, 6.0), 12.0);
+            assert_eq!(centered_offset(6.0, 30.0), 0.0);
         }
     }
 }

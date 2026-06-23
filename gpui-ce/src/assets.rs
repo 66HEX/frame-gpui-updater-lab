@@ -21,6 +21,13 @@ pub const ICON_BOOKMARK: &str = "icons/bookmark.svg";
 pub const ICON_SETTINGS: &str = "icons/settings.svg";
 pub const ICON_PLUS: &str = "icons/plus.svg";
 pub const ICON_PLAY: &str = "icons/play.svg";
+pub const ICON_PAUSE: &str = "icons/pause.svg";
+pub const ICON_ROTATE_CW: &str = "icons/rotate-cw.svg";
+pub const ICON_FLIP_HORIZONTAL: &str = "icons/flip-horizontal.svg";
+pub const ICON_FLIP_VERTICAL: &str = "icons/flip-vertical.svg";
+pub const ICON_CROP: &str = "icons/crop.svg";
+pub const ICON_ZOOM_IN: &str = "icons/zoom-in.svg";
+pub const ICON_ZOOM_OUT: &str = "icons/zoom-out.svg";
 
 const FRAME_ICON_SVG: &str = include_str!("../assets/icons/frame.svg");
 const FRAME_FONT_BYTES: &[u8] =
@@ -40,6 +47,13 @@ const BOOKMARK_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="curr
 const SETTINGS_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M64,105V40a8,8,0,0,0-16,0v65a32,32,0,0,0,0,62v49a8,8,0,0,0,16,0V167a32,32,0,0,0,0-62Zm-8,47a16,16,0,1,1,16-16A16,16,0,0,1,56,152Zm80-95V40a8,8,0,0,0-16,0V57a32,32,0,0,0,0,62v97a8,8,0,0,0,16,0V119a32,32,0,0,0,0-62Zm-8,47a16,16,0,1,1,16-16A16,16,0,0,1,128,104Zm104,64a32.06,32.06,0,0,0-24-31V40a8,8,0,0,0-16,0v97a32,32,0,0,0,0,62v17a8,8,0,0,0,16,0V199A32.06,32.06,0,0,0,232,168Zm-32,16a16,16,0,1,1,16-16A16,16,0,0,1,200,184Z"/></svg>"#;
 const PLUS_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></svg>"#;
 const PLAY_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z"/></svg>"#;
+const PAUSE_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 256 256"><path d="M96,40V216a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8H88A8,8,0,0,1,96,40Zm104-8H168a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8h32a8,8,0,0,0,8-8V40A8,8,0,0,0,200,32Z"/></svg>"#;
+const ROTATE_CW_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><path d="M208 80a88 88 0 1 0 20 56"/><path d="M208 32v48h-48"/></svg>"#;
+const FLIP_HORIZONTAL_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><path d="M128 24v208"/><path d="m96 72-56 56 56 56V72Z"/><path d="m160 72 56 56-56 56V72Z"/></svg>"#;
+const FLIP_VERTICAL_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><path d="M24 128h208"/><path d="m72 96 56-56 56 56H72Z"/><path d="m72 160 56 56 56-56H72Z"/></svg>"#;
+const CROP_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><path d="M64 24v144a24 24 0 0 0 24 24h144"/><path d="M24 64h144a24 24 0 0 1 24 24v144"/></svg>"#;
+const ZOOM_IN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><circle cx="112" cy="112" r="72"/><path d="M163 163l53 53"/><path d="M112 80v64"/><path d="M80 112h64"/></svg>"#;
+const ZOOM_OUT_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 256 256"><circle cx="112" cy="112" r="72"/><path d="M163 163l53 53"/><path d="M80 112h64"/></svg>"#;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameAssets;
@@ -63,6 +77,13 @@ impl AssetSource for FrameAssets {
             ICON_SETTINGS => Cow::Borrowed(SETTINGS_SVG.as_bytes()),
             ICON_PLUS => Cow::Borrowed(PLUS_SVG.as_bytes()),
             ICON_PLAY => Cow::Borrowed(PLAY_SVG.as_bytes()),
+            ICON_PAUSE => Cow::Borrowed(PAUSE_SVG.as_bytes()),
+            ICON_ROTATE_CW => Cow::Borrowed(ROTATE_CW_SVG.as_bytes()),
+            ICON_FLIP_HORIZONTAL => Cow::Borrowed(FLIP_HORIZONTAL_SVG.as_bytes()),
+            ICON_FLIP_VERTICAL => Cow::Borrowed(FLIP_VERTICAL_SVG.as_bytes()),
+            ICON_CROP => Cow::Borrowed(CROP_SVG.as_bytes()),
+            ICON_ZOOM_IN => Cow::Borrowed(ZOOM_IN_SVG.as_bytes()),
+            ICON_ZOOM_OUT => Cow::Borrowed(ZOOM_OUT_SVG.as_bytes()),
             _ => return Ok(None),
         };
 
@@ -79,15 +100,22 @@ impl AssetSource for FrameAssets {
                 SharedString::from("file-image.svg"),
                 SharedString::from("file-up.svg"),
                 SharedString::from("file-video.svg"),
+                SharedString::from("flip-horizontal.svg"),
+                SharedString::from("flip-vertical.svg"),
                 SharedString::from("frame.svg"),
                 SharedString::from("hard-drive.svg"),
                 SharedString::from("layout-list.svg"),
                 SharedString::from("music.svg"),
+                SharedString::from("pause.svg"),
                 SharedString::from("play.svg"),
                 SharedString::from("plus.svg"),
+                SharedString::from("crop.svg"),
+                SharedString::from("rotate-cw.svg"),
                 SharedString::from("settings.svg"),
                 SharedString::from("tags.svg"),
                 SharedString::from("terminal.svg"),
+                SharedString::from("zoom-in.svg"),
+                SharedString::from("zoom-out.svg"),
             ],
             _ => Vec::new(),
         };

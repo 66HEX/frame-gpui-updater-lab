@@ -3,6 +3,7 @@
 pub mod assets;
 pub mod conversion_events;
 pub mod file_queue;
+pub mod preview;
 pub mod settings;
 pub mod source_metadata;
 pub mod theme;
@@ -36,6 +37,15 @@ pub const SETTINGS_PANEL_PADDING: f32 = 16.0;
 pub const SETTINGS_TAB_BUTTON_SIZE: f32 = 24.0;
 pub const SETTINGS_TAB_ICON_SIZE: f32 = 16.0;
 pub const SETTINGS_CONTROL_HEIGHT: f32 = 30.0;
+pub const PREVIEW_PANEL_PADDING: f32 = CONTENT_PADDING;
+pub const PREVIEW_TIMELINE_TOP_MARGIN: f32 = 16.0;
+pub const PREVIEW_TIMELINE_CONTROL_HEIGHT: f32 = SETTINGS_CONTROL_HEIGHT;
+pub const PREVIEW_TIMELINE_HANDLE_WIDTH: f32 = 20.0;
+pub const PREVIEW_TOOLBAR_OFFSET: f32 = 16.0;
+pub const PREVIEW_TOOLBAR_BUTTON_SIZE: f32 = 30.0;
+pub const PREVIEW_TOOLBAR_ICON_SIZE: f32 = 16.0;
+pub const PREVIEW_TRACK_HEIGHT: f32 = 6.0;
+pub const PREVIEW_PLAYHEAD_HEIGHT: f32 = 16.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ActiveView {
@@ -54,12 +64,14 @@ pub fn active_view_from_env_value(value: Option<&str>) -> ActiveView {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VisualFixture {
     LogsActive,
+    PreviewReady,
 }
 
 #[must_use]
 pub fn visual_fixture_from_env_value(value: Option<&str>) -> Option<VisualFixture> {
     match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
         Some("logs-active") => Some(VisualFixture::LogsActive),
+        Some("preview-ready") => Some(VisualFixture::PreviewReady),
         _ => None,
     }
 }
@@ -196,6 +208,14 @@ mod tests {
         }
 
         #[test]
+        fn preview_ready_value_enables_workspace_preview_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("preview-ready")),
+                Some(VisualFixture::PreviewReady)
+            );
+        }
+
+        #[test]
         fn missing_or_unknown_value_disables_visual_fixtures() {
             assert_eq!(visual_fixture_from_env_value(None), None);
             assert_eq!(visual_fixture_from_env_value(Some("workspace")), None);
@@ -262,6 +282,26 @@ mod tests {
         #[test]
         fn settings_controls_match_original_default_button_height() {
             assert_eq!(SETTINGS_CONTROL_HEIGHT, 30.0);
+        }
+
+        #[test]
+        fn preview_panel_padding_matches_original_card_padding() {
+            assert_eq!(PREVIEW_PANEL_PADDING, CONTENT_PADDING);
+        }
+
+        #[test]
+        fn preview_timeline_controls_match_original_timecode_height() {
+            assert_eq!(PREVIEW_TIMELINE_CONTROL_HEIGHT, 30.0);
+        }
+
+        #[test]
+        fn preview_toolbar_buttons_match_original_icon_button_size() {
+            assert_eq!(PREVIEW_TOOLBAR_BUTTON_SIZE, 30.0);
+        }
+
+        #[test]
+        fn preview_timeline_handle_matches_original_hit_width() {
+            assert_eq!(PREVIEW_TIMELINE_HANDLE_WIDTH, 20.0);
         }
     }
 }
