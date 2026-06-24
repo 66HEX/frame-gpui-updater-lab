@@ -299,6 +299,42 @@ mod frame_root_conversion {
     }
 
     #[test]
+    fn preset_name_input_inserts_free_text_at_selection() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.preset_name_draft = "Review".to_string();
+        root.preset_name_input.selected_range = 6..6;
+
+        assert!(root.replace_text_input_range(
+            FrameTextInputKind::PresetName,
+            None,
+            " MP4",
+            None,
+            false,
+        ));
+
+        assert_eq!(root.preset_name_draft, "Review MP4");
+    }
+
+    #[test]
+    fn save_preset_from_draft_adds_custom_preset() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.preset_name_draft = "Review MP4".to_string();
+
+        assert!(root.save_preset_from_draft());
+
+        assert!(
+            root.presets
+                .iter()
+                .any(|preset| preset.name == "Review MP4")
+        );
+        assert!(root.preset_name_draft.is_empty());
+    }
+
+    #[test]
     fn audio_bitrate_input_inserts_digits_at_selection() {
         let mut root = FrameRoot::new();
         root.file_queue
@@ -818,6 +854,35 @@ mod visual_fixtures {
             Some(SourceKind::Image)
         );
     }
+
+    #[test]
+    fn settings_subtitles_fixture_opens_subtitles_tab_with_tracks() {
+        let mut root = FrameRoot::new();
+
+        root.apply_visual_fixture(Some(VisualFixture::SettingsSubtitles));
+
+        assert_eq!(root.settings_active_tab, SettingsTab::Subtitles);
+        assert_eq!(
+            root.selected_source_metadata()
+                .map(|metadata| metadata.subtitle_tracks.len()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn settings_presets_fixture_opens_presets_tab_with_custom_draft() {
+        let mut root = FrameRoot::new();
+
+        root.apply_visual_fixture(Some(VisualFixture::SettingsPresets));
+
+        assert_eq!(root.settings_active_tab, SettingsTab::Presets);
+        assert_eq!(root.preset_name_draft, "Client Review MP4");
+        assert!(
+            root.presets
+                .iter()
+                .any(|preset| preset.id == "custom-review")
+        );
+    }
 }
 
 mod button_state_colors {
@@ -912,6 +977,11 @@ mod preview_shell {
                 date: None,
                 comment: None,
             },
+            preset_name: "",
+            preset_name_focus: None,
+            presets: &[],
+            preset_notice: None,
+            subtitle_fonts: &[],
             available_encoders: empty_encoders(),
         }
     }

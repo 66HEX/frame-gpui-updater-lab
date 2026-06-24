@@ -73,6 +73,8 @@ pub enum VisualFixture {
     PreviewReady,
     SettingsImages,
     SettingsMetadata,
+    SettingsPresets,
+    SettingsSubtitles,
     SettingsVideo,
 }
 
@@ -85,6 +87,8 @@ pub fn visual_fixture_from_env_value(value: Option<&str>) -> Option<VisualFixtur
         Some("preview-ready") => Some(VisualFixture::PreviewReady),
         Some("settings-images") => Some(VisualFixture::SettingsImages),
         Some("settings-metadata") => Some(VisualFixture::SettingsMetadata),
+        Some("settings-presets") => Some(VisualFixture::SettingsPresets),
+        Some("settings-subtitles") => Some(VisualFixture::SettingsSubtitles),
         Some("settings-video") => Some(VisualFixture::SettingsVideo),
         _ => None,
     }
@@ -250,6 +254,22 @@ mod tests {
             assert_eq!(
                 visual_fixture_from_env_value(Some("settings-metadata")),
                 Some(VisualFixture::SettingsMetadata)
+            );
+        }
+
+        #[test]
+        fn settings_presets_value_enables_presets_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("settings-presets")),
+                Some(VisualFixture::SettingsPresets)
+            );
+        }
+
+        #[test]
+        fn settings_subtitles_value_enables_subtitles_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("settings-subtitles")),
+                Some(VisualFixture::SettingsSubtitles)
             );
         }
 

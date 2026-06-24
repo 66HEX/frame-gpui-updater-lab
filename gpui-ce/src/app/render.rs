@@ -80,6 +80,10 @@ impl Render for FrameRoot {
                     .settings_metadata_comment_focus
                     .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
                     .clone();
+                let preset_name_focus = self
+                    .settings_preset_name_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
                 content.child(workspace_view(
                     &self.file_queue,
                     SettingsRenderState {
@@ -104,6 +108,11 @@ impl Render for FrameRoot {
                             date: Some(&metadata_date_focus),
                             comment: Some(&metadata_comment_focus),
                         },
+                        preset_name: &self.preset_name_draft,
+                        preset_name_focus: Some(&preset_name_focus),
+                        presets: &self.presets,
+                        preset_notice: self.preset_notice.as_ref(),
+                        subtitle_fonts: &self.subtitle_font_families,
                         available_encoders: &self.available_encoders,
                     },
                     preview_crop,

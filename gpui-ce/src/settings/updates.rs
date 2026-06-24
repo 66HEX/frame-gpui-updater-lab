@@ -3,7 +3,7 @@ use super::{
     options::{
         first_allowed_video_codec, first_allowed_video_pixel_format, first_allowed_video_preset,
         is_hardware_video_codec, is_nvenc_video_codec, is_video_preset_allowed,
-        is_videotoolbox_video_codec,
+        is_videotoolbox_video_codec, normalized_hex_color,
     },
     rules::*,
 };
@@ -172,6 +172,93 @@ pub fn apply_metadata_field(
 
     *target = value;
     true
+}
+
+pub fn apply_subtitle_burn_path(config: &mut ConversionConfig, path: Option<String>) -> bool {
+    let path = path
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty());
+    if config.subtitle_burn_path == path {
+        return false;
+    }
+
+    config.subtitle_burn_path = path;
+    true
+}
+
+pub fn apply_subtitle_font_name(config: &mut ConversionConfig, font: &str) -> bool {
+    let font = font.trim();
+    let font = if font.is_empty() {
+        None
+    } else {
+        Some(font.to_string())
+    };
+    if config.subtitle_font_name == font {
+        return false;
+    }
+
+    config.subtitle_font_name = font;
+    true
+}
+
+pub fn apply_subtitle_font_size(config: &mut ConversionConfig, size: &str) -> bool {
+    let size = size.trim();
+    let size = if size.is_empty() {
+        None
+    } else if SUBTITLE_FONT_SIZES.contains(&size) {
+        Some(size.to_string())
+    } else {
+        return false;
+    };
+
+    if config.subtitle_font_size == size {
+        return false;
+    }
+
+    config.subtitle_font_size = size;
+    true
+}
+
+pub fn apply_subtitle_font_color(config: &mut ConversionConfig, color: &str) -> bool {
+    apply_subtitle_color(&mut config.subtitle_font_color, color)
+}
+
+pub fn apply_subtitle_outline_color(config: &mut ConversionConfig, color: &str) -> bool {
+    apply_subtitle_color(&mut config.subtitle_outline_color, color)
+}
+
+pub fn apply_subtitle_position(config: &mut ConversionConfig, position: SubtitlePosition) -> bool {
+    let position = Some(position.id().to_string());
+    if config.subtitle_position == position {
+        return false;
+    }
+
+    config.subtitle_position = position;
+    true
+}
+
+pub fn toggle_subtitle_track_selection(config: &mut ConversionConfig, index: u32) -> bool {
+    if config.selected_subtitle_tracks.contains(&index) {
+        config
+            .selected_subtitle_tracks
+            .retain(|selected_index| *selected_index != index);
+    } else {
+        config.selected_subtitle_tracks.push(index);
+    }
+
+    true
+}
+
+pub fn apply_preset(
+    config: &mut ConversionConfig,
+    preset: &PresetDefinition,
+    metadata: Option<&SourceMetadata>,
+) -> bool {
+    let before = config.clone();
+    *config = preset.config.clone();
+    normalize_output_config(config, metadata);
+
+    before != *config
 }
 
 pub fn apply_resolution(config: &mut ConversionConfig, resolution: &str) -> bool {
@@ -503,6 +590,7 @@ pub fn normalize_output_config(
         config.end_time = None;
         config.selected_audio_tracks.clear();
         config.selected_subtitle_tracks.clear();
+        reset_subtitle_settings(config);
         config.metadata.album = None;
         config.metadata.genre = None;
         reset_audio_filter_settings(config);
@@ -510,6 +598,7 @@ pub fn normalize_output_config(
 
     if source_kind == SourceKind::Audio || is_audio_only_container(&config.container) {
         config.crop = None;
+        reset_subtitle_settings(config);
     }
 
     if (source_kind == SourceKind::Image || is_gif_container(&config.container))
@@ -521,11 +610,16 @@ pub fn normalize_output_config(
     if config.processing_mode == ProcessingMode::Copy {
         reset_audio_filter_settings(config);
         reset_video_filter_settings(config);
+        config.subtitle_burn_path = None;
     }
 
     if !container_supports_audio(&config.container) {
         config.selected_audio_tracks.clear();
         config.audio_normalize = false;
+    }
+
+    if !container_supports_subtitles(&config.container) {
+        reset_subtitle_settings(config);
     }
 
     if config.processing_mode != ProcessingMode::Copy
@@ -558,12 +652,14 @@ pub fn normalize_video_config(
         config.processing_mode = ProcessingMode::Reencode;
         config.selected_audio_tracks.clear();
         config.selected_subtitle_tracks.clear();
+        reset_subtitle_settings(config);
     }
 
     if is_audio_container {
         config.pixel_format = DEFAULT_PIXEL_FORMAT.to_string();
         config.ml_upscale = "none".to_string();
         config.selected_subtitle_tracks.clear();
+        reset_subtitle_settings(config);
     }
 
     if is_gif_output {
@@ -643,6 +739,16 @@ fn reset_audio_filter_settings(config: &mut ConversionConfig) {
     config.audio_bitrate_mode = DEFAULT_AUDIO_BITRATE_MODE.to_string();
 }
 
+fn reset_subtitle_settings(config: &mut ConversionConfig) {
+    config.selected_subtitle_tracks.clear();
+    config.subtitle_burn_path = None;
+    config.subtitle_font_name = None;
+    config.subtitle_font_size = None;
+    config.subtitle_font_color = None;
+    config.subtitle_outline_color = None;
+    config.subtitle_position = None;
+}
+
 fn reset_video_filter_settings(config: &mut ConversionConfig) {
     config.pixel_format = DEFAULT_PIXEL_FORMAT.to_string();
     config.resolution = DEFAULT_RESOLUTION.to_string();
@@ -658,6 +764,18 @@ fn reset_video_filter_settings(config: &mut ConversionConfig) {
     config.nvenc_spatial_aq = false;
     config.nvenc_temporal_aq = false;
     config.videotoolbox_allow_sw = false;
+}
+
+fn apply_subtitle_color(target: &mut Option<String>, color: &str) -> bool {
+    let Some(color) = normalized_hex_color(color) else {
+        return false;
+    };
+    if target.as_deref() == Some(color.as_str()) {
+        return false;
+    }
+
+    *target = Some(color);
+    true
 }
 
 #[must_use]

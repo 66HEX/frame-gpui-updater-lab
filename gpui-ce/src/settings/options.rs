@@ -4,12 +4,14 @@ use super::{
     model::{
         AUDIO_CHANNEL_DEFINITIONS, AUDIO_CODEC_DEFINITIONS, AudioChannelOption, AudioCodecOption,
         AudioTrackOption, ConversionConfig, FPS_OPTIONS, GIF_COLOR_OPTIONS, GIF_DITHER_OPTIONS,
-        GIF_FPS_OPTIONS, METADATA_FIELDS, METADATA_MODES, MetadataField, MetadataFieldOption,
-        MetadataMode, MetadataModeOption, OPTIONAL_AUDIO_CODEC_DEFINITIONS, OutputContainerOption,
-        OutputModeOption, ProcessingMode, RESOLUTION_OPTIONS, SCALING_ALGORITHM_OPTIONS,
-        SourceKind, SourceMetadata, VIDEO_CODEC_DEFINITIONS, VIDEO_PIXEL_FORMAT_DEFINITIONS,
-        VIDEO_PRESETS, VideoCodecCapability, VideoCodecOption, VideoPixelFormatOption,
-        VideoPresetOption,
+        GIF_FPS_OPTIONS, METADATA_FIELDS, METADATA_MODES, MetadataConfig, MetadataField,
+        MetadataFieldOption, MetadataMode, MetadataModeOption, OPTIONAL_AUDIO_CODEC_DEFINITIONS,
+        OutputContainerOption, OutputModeOption, PresetDefinition, PresetOption, ProcessingMode,
+        RESOLUTION_OPTIONS, SCALING_ALGORITHM_OPTIONS, SUBTITLE_FONT_SIZES, SUBTITLE_POSITIONS,
+        SourceKind, SourceMetadata, SubtitleFontOption, SubtitleFontSizeOption, SubtitlePosition,
+        SubtitlePositionOption, SubtitleTrackOption, VIDEO_CODEC_DEFINITIONS,
+        VIDEO_PIXEL_FORMAT_DEFINITIONS, VIDEO_PRESETS, VideoCodecCapability, VideoCodecOption,
+        VideoPixelFormatOption, VideoPresetOption,
     },
     rules::*,
     source_info::{audio_track_detail, display_source_value},
@@ -136,6 +138,124 @@ pub fn audio_track_options(
 }
 
 #[must_use]
+pub fn subtitle_track_options(
+    config: &ConversionConfig,
+    metadata: Option<&SourceMetadata>,
+    disabled: bool,
+) -> Vec<SubtitleTrackOption> {
+    metadata
+        .map(|metadata| {
+            metadata
+                .subtitle_tracks
+                .iter()
+                .map(|track| SubtitleTrackOption {
+                    index: track.index,
+                    index_label: format!("#{}", track.index),
+                    codec: display_source_value(Some(&track.codec)),
+                    detail: subtitle_track_detail(
+                        track.language.as_deref(),
+                        track.label.as_deref(),
+                    ),
+                    is_selected: config.selected_subtitle_tracks.contains(&track.index),
+                    is_disabled: disabled,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[must_use]
+pub fn subtitle_font_options(
+    config: &ConversionConfig,
+    fonts: &[String],
+    disabled: bool,
+) -> Vec<SubtitleFontOption> {
+    let selected = config.subtitle_font_name.as_deref().unwrap_or_default();
+    fonts
+        .iter()
+        .map(|font| SubtitleFontOption {
+            name: font.clone(),
+            is_selected: selected == font,
+            is_disabled: disabled,
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn subtitle_font_size_options(
+    config: &ConversionConfig,
+    disabled: bool,
+) -> [SubtitleFontSizeOption; 14] {
+    let selected = config.subtitle_font_size.as_deref().unwrap_or_default();
+    SUBTITLE_FONT_SIZES.map(|size| SubtitleFontSizeOption {
+        size,
+        is_selected: selected == size,
+        is_disabled: disabled,
+    })
+}
+
+#[must_use]
+pub fn subtitle_position_options(
+    config: &ConversionConfig,
+    disabled: bool,
+) -> [SubtitlePositionOption; 3] {
+    let selected = subtitle_position(config);
+    SUBTITLE_POSITIONS.map(|position| SubtitlePositionOption {
+        position,
+        label: position.label(),
+        is_selected: selected == position,
+        is_disabled: disabled,
+    })
+}
+
+#[must_use]
+pub fn subtitle_position(config: &ConversionConfig) -> SubtitlePosition {
+    config
+        .subtitle_position
+        .as_deref()
+        .and_then(SubtitlePosition::from_id)
+        .unwrap_or(super::model::DEFAULT_SUBTITLE_POSITION)
+}
+
+#[must_use]
+pub fn subtitle_burn_file_label(config: &ConversionConfig) -> String {
+    config
+        .subtitle_burn_path
+        .as_deref()
+        .and_then(|path| path.rsplit(['/', '\\']).next())
+        .filter(|name| !name.is_empty())
+        .map_or_else(
+            || "Select .srt or .ass file".to_string(),
+            ToString::to_string,
+        )
+}
+
+#[must_use]
+pub fn subtitle_color_value(value: Option<&String>, fallback: &str) -> String {
+    value
+        .and_then(|value| normalized_hex_color(value.as_str()))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+#[must_use]
+pub fn normalized_hex_color(value: &str) -> Option<String> {
+    let source = value.trim().trim_start_matches('#');
+    if source.len() == 3 && source.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        let mut expanded = String::from("#");
+        for ch in source.chars() {
+            expanded.push(ch.to_ascii_lowercase());
+            expanded.push(ch.to_ascii_lowercase());
+        }
+        return Some(expanded);
+    }
+    if source.len() == 6 && source.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Some(format!("#{}", source.to_ascii_lowercase()));
+    }
+
+    None
+}
+
+#[must_use]
 pub fn metadata_mode_options(config: &ConversionConfig, disabled: bool) -> [MetadataModeOption; 3] {
     METADATA_MODES.map(|mode| MetadataModeOption {
         mode,
@@ -207,6 +327,198 @@ pub fn metadata_field_placeholder(
             || "Leave empty to keep original".to_string(),
             ToString::to_string,
         )
+}
+
+#[must_use]
+pub fn default_presets() -> Vec<PresetDefinition> {
+    vec![
+        PresetDefinition::built_in("balanced-mp4", "Balanced MP4", preset_config("mp4")),
+        PresetDefinition::built_in(
+            "archive-hq",
+            "Archive H.265",
+            ConversionConfig {
+                container: "mkv".to_string(),
+                video_codec: "libx265".to_string(),
+                video_bitrate: "8000".to_string(),
+                audio_codec: "ac3".to_string(),
+                audio_bitrate: "192".to_string(),
+                scaling_algorithm: "lanczos".to_string(),
+                crf: 18,
+                quality: 60,
+                preset: "slow".to_string(),
+                ..preset_config("mkv")
+            },
+        ),
+        PresetDefinition::built_in(
+            "web-share",
+            "Web Share",
+            ConversionConfig {
+                container: "webm".to_string(),
+                video_codec: "vp9".to_string(),
+                video_bitrate: "2500".to_string(),
+                audio_codec: "libopus".to_string(),
+                audio_bitrate: "96".to_string(),
+                audio_channels: "stereo".to_string(),
+                resolution: "720p".to_string(),
+                crf: 30,
+                quality: 40,
+                ..preset_config("webm")
+            },
+        ),
+        PresetDefinition::built_in(
+            "gif-web-small",
+            "GIF Web Small",
+            gif_preset_config("custom", Some("640"), Some("360"), "12", 128, "sierra2_4a"),
+        ),
+        PresetDefinition::built_in(
+            "gif-quality",
+            "GIF High Quality",
+            gif_preset_config("720p", None, None, "15", 256, "floyd_steinberg"),
+        ),
+        PresetDefinition::built_in(
+            "audio-only",
+            "Audio MP3",
+            audio_preset_config("mp3", "mp3", "128", "stereo"),
+        ),
+        PresetDefinition::built_in(
+            "audio-flac",
+            "Audio FLAC (Lossless)",
+            audio_preset_config("flac", "flac", "0", "original"),
+        ),
+        PresetDefinition::built_in(
+            "audio-alac",
+            "Audio ALAC (Apple)",
+            audio_preset_config("m4a", "alac", "0", "original"),
+        ),
+        PresetDefinition::built_in(
+            "audio-wav",
+            "Audio WAV (Lossless)",
+            audio_preset_config("wav", "pcm_s16le", "0", "original"),
+        ),
+        PresetDefinition::built_in(
+            "social-tiktok",
+            "Social (TikTok/Reels)",
+            social_preset_config("6000", "custom", Some("1080"), Some("1920"), "30", "slow"),
+        ),
+        PresetDefinition::built_in(
+            "yt-1080p",
+            "YouTube 1080p",
+            youtube_preset_config("10000", "1080p", None, None),
+        ),
+        PresetDefinition::built_in(
+            "yt-4k",
+            "YouTube 4K",
+            youtube_preset_config("40000", "custom", Some("3840"), Some("2160")),
+        ),
+        PresetDefinition::built_in(
+            "x-landscape",
+            "X (Landscape)",
+            social_preset_config("2500", "720p", None, None, "30", "medium"),
+        ),
+        PresetDefinition::built_in(
+            "x-portrait",
+            "X (Mobile/Portrait)",
+            social_preset_config("2000", "custom", Some("720"), Some("1280"), "30", "medium"),
+        ),
+        PresetDefinition::built_in(
+            "discord",
+            "Discord",
+            ConversionConfig {
+                video_bitrate_mode: "bitrate".to_string(),
+                video_bitrate: "1000".to_string(),
+                audio_bitrate: "64".to_string(),
+                audio_channels: "stereo".to_string(),
+                audio_normalize: true,
+                resolution: "720p".to_string(),
+                fps: "30".to_string(),
+                preset: "veryfast".to_string(),
+                metadata: MetadataConfig {
+                    mode: MetadataMode::Clean,
+                    ..MetadataConfig::default()
+                },
+                ..preset_config("mp4")
+            },
+        ),
+    ]
+}
+
+#[must_use]
+pub fn preset_options(
+    config: &ConversionConfig,
+    presets: &[PresetDefinition],
+    metadata: Option<&SourceMetadata>,
+) -> Vec<PresetOption> {
+    presets
+        .iter()
+        .map(|preset| {
+            let is_compatible = preset_is_compatible(preset, metadata);
+            let is_selected = configs_match(config, &preset.config);
+            PresetOption {
+                preset: preset.clone(),
+                is_selected,
+                is_compatible,
+                status: if !is_compatible {
+                    Some("Incompatible container")
+                } else if is_selected {
+                    Some("Applied")
+                } else {
+                    None
+                },
+            }
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn configs_match(a: &ConversionConfig, b: &ConversionConfig) -> bool {
+    if a.container != b.container
+        || a.video_codec != b.video_codec
+        || a.audio_codec != b.audio_codec
+        || a.resolution != b.resolution
+        || a.preset != b.preset
+        || a.video_bitrate_mode != b.video_bitrate_mode
+    {
+        return false;
+    }
+
+    if a.video_bitrate_mode == "crf" {
+        if a.crf != b.crf || a.quality != b.quality {
+            return false;
+        }
+    } else if a.video_bitrate != b.video_bitrate {
+        return false;
+    }
+
+    if a.resolution == "custom" {
+        return a.custom_width == b.custom_width && a.custom_height == b.custom_height;
+    }
+
+    true
+}
+
+#[must_use]
+pub fn preset_is_compatible(preset: &PresetDefinition, metadata: Option<&SourceMetadata>) -> bool {
+    match source_kind_for(metadata) {
+        SourceKind::Image => {
+            is_image_container(&preset.config.container)
+                || is_gif_container(&preset.config.container)
+        }
+        SourceKind::Audio => is_audio_only_container(&preset.config.container),
+        SourceKind::Video => true,
+    }
+}
+
+#[must_use]
+pub fn create_custom_preset(id: String, name: &str, config: &ConversionConfig) -> PresetDefinition {
+    PresetDefinition::custom(
+        id,
+        if name.trim().is_empty() {
+            "Untitled Preset".to_string()
+        } else {
+            name.trim().to_string()
+        },
+        config.clone(),
+    )
 }
 
 #[must_use]
@@ -369,6 +681,114 @@ fn output_mode_option(
         is_selected: config.processing_mode == mode,
         is_disabled,
     }
+}
+
+fn preset_config(container: &str) -> ConversionConfig {
+    ConversionConfig {
+        container: container.to_string(),
+        ..ConversionConfig::default()
+    }
+}
+
+fn gif_preset_config(
+    resolution: &str,
+    custom_width: Option<&str>,
+    custom_height: Option<&str>,
+    fps: &str,
+    colors: u16,
+    dither: &str,
+) -> ConversionConfig {
+    ConversionConfig {
+        container: "gif".to_string(),
+        video_codec: "gif".to_string(),
+        video_bitrate: "0".to_string(),
+        audio_bitrate: "0".to_string(),
+        resolution: resolution.to_string(),
+        custom_width: custom_width.map(str::to_string),
+        custom_height: custom_height.map(str::to_string),
+        scaling_algorithm: "lanczos".to_string(),
+        fps: fps.to_string(),
+        metadata: MetadataConfig {
+            mode: MetadataMode::Clean,
+            ..MetadataConfig::default()
+        },
+        gif_colors: colors,
+        gif_dither: dither.to_string(),
+        ..ConversionConfig::default()
+    }
+}
+
+fn audio_preset_config(
+    container: &str,
+    codec: &str,
+    bitrate: &str,
+    channels: &str,
+) -> ConversionConfig {
+    ConversionConfig {
+        container: container.to_string(),
+        video_bitrate: "0".to_string(),
+        audio_codec: codec.to_string(),
+        audio_bitrate: bitrate.to_string(),
+        audio_channels: channels.to_string(),
+        ..ConversionConfig::default()
+    }
+}
+
+fn social_preset_config(
+    bitrate: &str,
+    resolution: &str,
+    custom_width: Option<&str>,
+    custom_height: Option<&str>,
+    fps: &str,
+    preset: &str,
+) -> ConversionConfig {
+    ConversionConfig {
+        video_bitrate_mode: "bitrate".to_string(),
+        video_bitrate: bitrate.to_string(),
+        audio_channels: "stereo".to_string(),
+        audio_normalize: true,
+        resolution: resolution.to_string(),
+        custom_width: custom_width.map(str::to_string),
+        custom_height: custom_height.map(str::to_string),
+        scaling_algorithm: "lanczos".to_string(),
+        fps: fps.to_string(),
+        preset: preset.to_string(),
+        metadata: MetadataConfig {
+            mode: MetadataMode::Clean,
+            ..MetadataConfig::default()
+        },
+        ..preset_config("mp4")
+    }
+}
+
+fn youtube_preset_config(
+    bitrate: &str,
+    resolution: &str,
+    custom_width: Option<&str>,
+    custom_height: Option<&str>,
+) -> ConversionConfig {
+    ConversionConfig {
+        video_bitrate_mode: "bitrate".to_string(),
+        video_bitrate: bitrate.to_string(),
+        audio_bitrate: "320".to_string(),
+        audio_channels: "stereo".to_string(),
+        audio_normalize: true,
+        resolution: resolution.to_string(),
+        custom_width: custom_width.map(str::to_string),
+        custom_height: custom_height.map(str::to_string),
+        scaling_algorithm: "lanczos".to_string(),
+        preset: "slow".to_string(),
+        ..preset_config("mp4")
+    }
+}
+
+fn subtitle_track_detail(language: Option<&str>, label: Option<&str>) -> String {
+    [language, label]
+        .into_iter()
+        .flatten()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join(" • ")
 }
 
 fn output_container_disabled_reason(

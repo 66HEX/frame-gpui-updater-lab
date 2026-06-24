@@ -19,6 +19,7 @@ impl FrameRoot {
             FrameTextInputKind::MetadataGenre => &self.metadata_genre_input,
             FrameTextInputKind::MetadataDate => &self.metadata_date_input,
             FrameTextInputKind::MetadataComment => &self.metadata_comment_input,
+            FrameTextInputKind::PresetName => &self.preset_name_input,
         }
     }
 
@@ -40,6 +41,7 @@ impl FrameRoot {
             FrameTextInputKind::MetadataGenre => &mut self.metadata_genre_input,
             FrameTextInputKind::MetadataDate => &mut self.metadata_date_input,
             FrameTextInputKind::MetadataComment => &mut self.metadata_comment_input,
+            FrameTextInputKind::PresetName => &mut self.preset_name_input,
         }
     }
 
@@ -61,6 +63,7 @@ impl FrameRoot {
             FrameTextInputKind::MetadataGenre => self.settings_metadata_genre_focus.as_ref(),
             FrameTextInputKind::MetadataDate => self.settings_metadata_date_focus.as_ref(),
             FrameTextInputKind::MetadataComment => self.settings_metadata_comment_focus.as_ref(),
+            FrameTextInputKind::PresetName => self.settings_preset_name_focus.as_ref(),
         }
     }
 
@@ -133,6 +136,11 @@ impl FrameRoot {
             .is_some_and(|focus| focus.is_focused(window))
         {
             Some(FrameTextInputKind::MetadataComment)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::PresetName)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::PresetName)
         } else {
             None
         }
@@ -161,6 +169,7 @@ impl FrameRoot {
             | FrameTextInputKind::MetadataGenre
             | FrameTextInputKind::MetadataDate
             | FrameTextInputKind::MetadataComment => self.file_queue.selected_file_locked(),
+            FrameTextInputKind::PresetName => self.file_queue.selected_file_locked(),
         }
     }
 
@@ -207,6 +216,7 @@ impl FrameRoot {
                     })
                 })
                 .unwrap_or_default(),
+            FrameTextInputKind::PresetName => self.preset_name_draft.clone(),
         }
     }
 
@@ -296,6 +306,15 @@ impl FrameRoot {
                     apply_metadata_field(&mut file.config, field, candidate);
                 })?;
                 Some(candidate.to_string())
+            }
+            FrameTextInputKind::PresetName => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next: String = candidate.chars().filter(|ch| !ch.is_control()).collect();
+                self.preset_name_draft = next.clone();
+                self.preset_notice = None;
+                Some(next)
             }
         }
     }

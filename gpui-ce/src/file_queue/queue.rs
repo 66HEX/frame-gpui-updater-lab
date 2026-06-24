@@ -26,6 +26,10 @@ impl FileQueue {
         &self.files
     }
 
+    pub fn files_mut(&mut self) -> &mut [FileItem] {
+        &mut self.files
+    }
+
     #[must_use]
     pub fn selected_file_id(&self) -> Option<&str> {
         self.selected_file_id.as_deref()

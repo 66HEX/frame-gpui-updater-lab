@@ -151,8 +151,14 @@ pub(in crate::app) fn settings_tab_content(
             window,
             cx,
         )),
-        SettingsTab::Subtitles => content
-            .child(settings_section("SUBTITLES").child(settings_value_row("STATUS", "Ready"))),
+        SettingsTab::Subtitles => content.child(settings_subtitles_tab(
+            settings.config,
+            settings.metadata,
+            settings.settings_disabled,
+            settings.subtitle_fonts,
+            window,
+            cx,
+        )),
         SettingsTab::Metadata => content.child(settings_metadata_tab(
             settings.config,
             settings.metadata,
@@ -161,9 +167,19 @@ pub(in crate::app) fn settings_tab_content(
             window,
             cx,
         )),
-        SettingsTab::Presets => {
-            content.child(settings_section("PRESETS").child(settings_value_row("STATUS", "Ready")))
-        }
+        SettingsTab::Presets => content.child(settings_presets_tab(
+            SettingsPresetsTabState {
+                config: settings.config,
+                metadata: settings.metadata,
+                settings_disabled: settings.settings_disabled,
+                preset_name: settings.preset_name,
+                preset_name_focus: settings.preset_name_focus,
+                presets: settings.presets,
+                notice: settings.preset_notice,
+            },
+            window,
+            cx,
+        )),
     }
 }
 

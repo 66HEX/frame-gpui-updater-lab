@@ -18,9 +18,8 @@ pub(super) fn sanitize_replacement_text(kind: FrameTextInputKind, value: &str) -
         | FrameTextInputKind::MetadataAlbum
         | FrameTextInputKind::MetadataGenre
         | FrameTextInputKind::MetadataDate
-        | FrameTextInputKind::MetadataComment => {
-            value.chars().filter(|ch| !ch.is_control()).collect()
-        }
+        | FrameTextInputKind::MetadataComment
+        | FrameTextInputKind::PresetName => value.chars().filter(|ch| !ch.is_control()).collect(),
     }
 }
 

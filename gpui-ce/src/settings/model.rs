@@ -19,6 +19,9 @@ pub const DEFAULT_AUDIO_QUALITY: &str = "4";
 pub const DEFAULT_AUDIO_CHANNELS: &str = "original";
 pub const DEFAULT_AUDIO_VOLUME: u32 = 100;
 pub const DEFAULT_METADATA_MODE: MetadataMode = MetadataMode::Preserve;
+pub const DEFAULT_SUBTITLE_FONT_COLOR: &str = "#ffffff";
+pub const DEFAULT_SUBTITLE_OUTLINE_COLOR: &str = "#000000";
+pub const DEFAULT_SUBTITLE_POSITION: SubtitlePosition = SubtitlePosition::Bottom;
 pub(super) const MAX_AUDIO_VOLUME: u32 = 200;
 pub(super) const MAX_GIF_LOOP: u16 = 65_535;
 pub(super) const MAX_GIF_COLORS: u16 = 256;
@@ -244,6 +247,53 @@ pub const METADATA_FIELDS: [MetadataField; 6] = [
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SubtitlePosition {
+    Bottom,
+    Middle,
+    Top,
+}
+
+impl SubtitlePosition {
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Bottom => "bottom",
+            Self::Middle => "middle",
+            Self::Top => "top",
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Bottom => "Bottom",
+            Self::Middle => "Middle",
+            Self::Top => "Top",
+        }
+    }
+
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "bottom" => Some(Self::Bottom),
+            "middle" => Some(Self::Middle),
+            "top" => Some(Self::Top),
+            _ => None,
+        }
+    }
+}
+
+pub const SUBTITLE_POSITIONS: [SubtitlePosition; 3] = [
+    SubtitlePosition::Bottom,
+    SubtitlePosition::Middle,
+    SubtitlePosition::Top,
+];
+
+pub const SUBTITLE_FONT_SIZES: [&str; 14] = [
+    "8", "10", "12", "14", "16", "18", "20", "22", "24", "28", "32", "36", "42", "48",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MetadataModeOption {
     pub mode: MetadataMode,
     pub label: &'static str,
@@ -259,6 +309,88 @@ pub struct MetadataFieldOption {
     pub value: String,
     pub placeholder: String,
     pub is_disabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubtitleFontOption {
+    pub name: String,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SubtitleFontSizeOption {
+    pub size: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SubtitlePositionOption {
+    pub position: SubtitlePosition,
+    pub label: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubtitleTrackOption {
+    pub index: u32,
+    pub index_label: String,
+    pub codec: String,
+    pub detail: String,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PresetDefinition {
+    pub id: String,
+    pub name: String,
+    pub config: ConversionConfig,
+    pub built_in: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PresetOption {
+    pub preset: PresetDefinition,
+    pub is_selected: bool,
+    pub is_compatible: bool,
+    pub status: Option<&'static str>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresetNoticeTone {
+    Success,
+    Error,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PresetNotice {
+    pub text: String,
+    pub tone: PresetNoticeTone,
+}
+
+impl PresetDefinition {
+    #[must_use]
+    pub fn built_in(id: &str, name: &str, config: ConversionConfig) -> Self {
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            config,
+            built_in: true,
+        }
+    }
+
+    #[must_use]
+    pub fn custom(id: String, name: String, config: ConversionConfig) -> Self {
+        Self {
+            id,
+            name,
+            config,
+            built_in: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -278,6 +410,12 @@ pub struct ConversionConfig {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub metadata: MetadataConfig,
+    pub subtitle_burn_path: Option<String>,
+    pub subtitle_font_name: Option<String>,
+    pub subtitle_font_size: Option<String>,
+    pub subtitle_font_color: Option<String>,
+    pub subtitle_outline_color: Option<String>,
+    pub subtitle_position: Option<String>,
     pub rotation: String,
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
@@ -321,6 +459,12 @@ impl Default for ConversionConfig {
             start_time: None,
             end_time: None,
             metadata: MetadataConfig::default(),
+            subtitle_burn_path: None,
+            subtitle_font_name: None,
+            subtitle_font_size: None,
+            subtitle_font_color: None,
+            subtitle_outline_color: None,
+            subtitle_position: None,
             rotation: "0".to_string(),
             flip_horizontal: false,
             flip_vertical: false,

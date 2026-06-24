@@ -300,6 +300,209 @@ mod audio_track_options {
     }
 }
 
+mod subtitle_options {
+    use super::*;
+
+    fn metadata_with_subtitles() -> SourceMetadata {
+        SourceMetadata {
+            media_kind: Some(SourceKind::Video),
+            subtitle_tracks: vec![
+                SubtitleTrack {
+                    index: 2,
+                    codec: "subrip".to_string(),
+                    language: Some("eng".to_string()),
+                    label: Some("Dialogue".to_string()),
+                },
+                SubtitleTrack {
+                    index: 3,
+                    codec: "ass".to_string(),
+                    language: Some("jpn".to_string()),
+                    label: Some("Signs".to_string()),
+                },
+            ],
+            ..SourceMetadata::default()
+        }
+    }
+
+    #[test]
+    fn default_subtitle_fields_match_original_empty_state() {
+        let config = ConversionConfig::default();
+
+        assert_eq!(config.subtitle_burn_path, None);
+        assert_eq!(config.subtitle_font_name, None);
+        assert_eq!(config.subtitle_font_size, None);
+        assert_eq!(config.subtitle_font_color, None);
+        assert_eq!(subtitle_position(&config), SubtitlePosition::Bottom);
+    }
+
+    #[test]
+    fn subtitle_track_options_mark_selected_track() {
+        let config = ConversionConfig {
+            selected_subtitle_tracks: vec![3],
+            ..ConversionConfig::default()
+        };
+
+        let options = subtitle_track_options(&config, Some(&metadata_with_subtitles()), false);
+
+        assert!(!options[0].is_selected);
+        assert!(options[1].is_selected);
+    }
+
+    #[test]
+    fn subtitle_track_options_format_language_and_label_detail() {
+        let options = subtitle_track_options(
+            &ConversionConfig::default(),
+            Some(&metadata_with_subtitles()),
+            false,
+        );
+
+        assert_eq!(options[0].detail, "eng • Dialogue");
+    }
+
+    #[test]
+    fn toggle_subtitle_track_selection_removes_selected_track() {
+        let mut config = ConversionConfig {
+            selected_subtitle_tracks: vec![2, 3],
+            ..ConversionConfig::default()
+        };
+
+        assert!(toggle_subtitle_track_selection(&mut config, 2));
+
+        assert_eq!(config.selected_subtitle_tracks, vec![3]);
+    }
+
+    #[test]
+    fn apply_subtitle_font_size_rejects_unknown_size() {
+        let mut config = ConversionConfig::default();
+
+        assert!(!apply_subtitle_font_size(&mut config, "13"));
+
+        assert_eq!(config.subtitle_font_size, None);
+    }
+
+    #[test]
+    fn apply_subtitle_font_color_normalizes_short_hex() {
+        let mut config = ConversionConfig::default();
+
+        assert!(apply_subtitle_font_color(&mut config, "#fff"));
+
+        assert_eq!(config.subtitle_font_color.as_deref(), Some("#ffffff"));
+    }
+
+    #[test]
+    fn normalize_output_config_clears_subtitle_settings_for_audio_container() {
+        let mut config = ConversionConfig {
+            container: "mp3".to_string(),
+            selected_subtitle_tracks: vec![2],
+            subtitle_burn_path: Some("/tmp/sub.srt".to_string()),
+            subtitle_font_name: Some("Arial".to_string()),
+            ..ConversionConfig::default()
+        };
+
+        assert!(normalize_output_config(
+            &mut config,
+            Some(&metadata_with_subtitles())
+        ));
+
+        assert!(config.selected_subtitle_tracks.is_empty());
+        assert_eq!(config.subtitle_burn_path, None);
+        assert_eq!(config.subtitle_font_name, None);
+    }
+}
+
+mod preset_options {
+    use super::*;
+
+    fn image_metadata() -> SourceMetadata {
+        SourceMetadata {
+            media_kind: Some(SourceKind::Image),
+            ..SourceMetadata::default()
+        }
+    }
+
+    fn audio_metadata() -> SourceMetadata {
+        SourceMetadata {
+            media_kind: Some(SourceKind::Audio),
+            ..SourceMetadata::default()
+        }
+    }
+
+    #[test]
+    fn default_presets_match_original_builtin_order() {
+        let presets = default_presets();
+
+        assert_eq!(presets[0].id, "balanced-mp4");
+        assert_eq!(presets[14].id, "discord");
+        assert!(presets.iter().all(|preset| preset.built_in));
+    }
+
+    #[test]
+    fn configs_match_uses_original_core_fields() {
+        let config = ConversionConfig {
+            video_bitrate_mode: "bitrate".to_string(),
+            video_bitrate: "6000".to_string(),
+            ..ConversionConfig::default()
+        };
+        let same = ConversionConfig {
+            video_bitrate_mode: "bitrate".to_string(),
+            video_bitrate: "6000".to_string(),
+            audio_bitrate: "999".to_string(),
+            ..ConversionConfig::default()
+        };
+
+        assert!(configs_match(&config, &same));
+    }
+
+    #[test]
+    fn preset_options_mark_balanced_mp4_applied_by_default() {
+        let presets = default_presets();
+        let options = preset_options(&ConversionConfig::default(), &presets, None);
+
+        assert!(options[0].is_selected);
+        assert_eq!(options[0].status, Some("Applied"));
+    }
+
+    #[test]
+    fn preset_compatibility_restricts_image_sources_to_image_and_gif_outputs() {
+        let presets = default_presets();
+        let options = preset_options(
+            &ConversionConfig::default(),
+            &presets,
+            Some(&image_metadata()),
+        );
+
+        assert!(!options[0].is_compatible);
+        assert!(options[3].is_compatible);
+    }
+
+    #[test]
+    fn preset_compatibility_restricts_audio_sources_to_audio_only_outputs() {
+        let presets = default_presets();
+        let options = preset_options(
+            &ConversionConfig::default(),
+            &presets,
+            Some(&audio_metadata()),
+        );
+
+        assert!(!options[0].is_compatible);
+        assert!(options[5].is_compatible);
+    }
+
+    #[test]
+    fn apply_preset_replaces_config_and_normalizes_for_metadata() {
+        let preset = default_presets()
+            .into_iter()
+            .find(|preset| preset.id == "audio-only")
+            .expect("audio preset should exist");
+        let mut config = ConversionConfig::default();
+
+        assert!(apply_preset(&mut config, &preset, Some(&audio_metadata())));
+
+        assert_eq!(config.container, "mp3");
+        assert_eq!(config.audio_codec, "mp3");
+    }
+}
+
 mod metadata_options {
     use super::*;
 

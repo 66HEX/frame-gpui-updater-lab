@@ -75,12 +75,12 @@ pub fn core_config_from_gpui(config: &GpuiConversionConfig) -> CoreConversionCon
         audio_normalize: config.audio_normalize,
         selected_audio_tracks: config.selected_audio_tracks.clone(),
         selected_subtitle_tracks: config.selected_subtitle_tracks.clone(),
-        subtitle_burn_path: None,
-        subtitle_font_name: None,
-        subtitle_font_size: None,
-        subtitle_font_color: None,
-        subtitle_outline_color: None,
-        subtitle_position: None,
+        subtitle_burn_path: config.subtitle_burn_path.clone(),
+        subtitle_font_name: config.subtitle_font_name.clone(),
+        subtitle_font_size: config.subtitle_font_size.clone(),
+        subtitle_font_color: config.subtitle_font_color.clone(),
+        subtitle_outline_color: config.subtitle_outline_color.clone(),
+        subtitle_position: config.subtitle_position.clone(),
         resolution: if config.resolution.is_empty() {
             DEFAULT_RESOLUTION.to_string()
         } else {

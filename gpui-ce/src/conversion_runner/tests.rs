@@ -21,6 +21,12 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
             artist: Some("Frame".to_string()),
             ..MetadataConfig::default()
         },
+        subtitle_burn_path: Some("/tmp/dialogue.srt".to_string()),
+        subtitle_font_name: Some("Arial".to_string()),
+        subtitle_font_size: Some("24".to_string()),
+        subtitle_font_color: Some("#ffffff".to_string()),
+        subtitle_outline_color: Some("#000000".to_string()),
+        subtitle_position: Some("bottom".to_string()),
         rotation: "90".to_string(),
         flip_horizontal: true,
         flip_vertical: true,
@@ -89,6 +95,15 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
     assert!(core.flip_vertical);
     assert_eq!(core.selected_audio_tracks, [1, 2]);
     assert_eq!(core.selected_subtitle_tracks, [3]);
+    assert_eq!(
+        core.subtitle_burn_path.as_deref(),
+        Some("/tmp/dialogue.srt")
+    );
+    assert_eq!(core.subtitle_font_name.as_deref(), Some("Arial"));
+    assert_eq!(core.subtitle_font_size.as_deref(), Some("24"));
+    assert_eq!(core.subtitle_font_color.as_deref(), Some("#ffffff"));
+    assert_eq!(core.subtitle_outline_color.as_deref(), Some("#000000"));
+    assert_eq!(core.subtitle_position.as_deref(), Some("bottom"));
     assert_eq!(core.crop.as_ref().map(|crop| crop.width), Some(300.0));
     assert_eq!(core.metadata.mode, frame_core::types::MetadataMode::Replace);
     assert_eq!(core.metadata.title.as_deref(), Some("Render Title"));

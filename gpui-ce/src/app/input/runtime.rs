@@ -15,6 +15,7 @@ pub(in crate::app) enum FrameTextInputKind {
     MetadataGenre,
     MetadataDate,
     MetadataComment,
+    PresetName,
 }
 
 pub(in crate::app) struct FrameTextInputRuntime {
