@@ -47,6 +47,9 @@ pub(super) fn file_list_header(
                         )
                         .id("file-list-header-checkbox")
                         .when(selection.is_enabled, |this| this.cursor_pointer())
+                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                            button_mouse_down(selection.is_enabled, window, cx);
+                        })
                         .on_click(cx.listener(
                             |root, _: &ClickEvent, _window, cx| {
                                 if !root.file_queue.files().is_empty() {
@@ -357,6 +360,10 @@ pub(super) fn row_action_button(
             })
             .active(move |style| style.bg(color(active_background)))
         })
+        .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
         .child(icon_svg(
             icon,
             FILE_LIST_ACTION_ICON_SIZE,
@@ -371,6 +378,9 @@ pub(super) fn row_checkbox_control(
     checkbox_hit_area(is_checked, false, true)
         .id(element_id("file-row-checkbox", &file_id))
         .cursor_pointer()
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             cx.stop_propagation();
             if root.file_queue.toggle_batch_selection(&file_id).is_some() {

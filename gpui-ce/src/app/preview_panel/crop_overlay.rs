@@ -281,5 +281,8 @@ pub(in crate::app) fn compact_text_button(
             })
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
         .child(label)
 }

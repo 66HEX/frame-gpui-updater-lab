@@ -138,4 +138,7 @@ pub(in crate::app) fn preview_tool_button(
             .active(move |style| style.bg(color(colors.active_background)))
         })
         .child(icon_svg(icon, PREVIEW_TOOLBAR_ICON_SIZE, icon_color))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
 }

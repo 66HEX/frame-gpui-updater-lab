@@ -77,6 +77,9 @@ pub(in crate::app) fn settings_tab_button(
                 .cursor_pointer()
         })
         .active(move |style| style.bg(color(colors.active_background)))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             root.settings_active_tab = tab;
             cx.stop_propagation();

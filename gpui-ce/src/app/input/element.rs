@@ -14,6 +14,18 @@ pub(super) struct FrameTextInputPrepaintState {
     selection: Option<PaintQuad>,
 }
 
+pub(in crate::app) const fn should_handle_text_input(
+    disabled: bool,
+    focused: bool,
+    active: bool,
+) -> bool {
+    !disabled && focused && active
+}
+
+pub(in crate::app) const fn should_capture_text_input_drag(is_selecting: bool) -> bool {
+    is_selecting
+}
+
 impl IntoElement for FrameTextInputElement {
     type Element = Self;
 
@@ -141,7 +153,11 @@ impl Element for FrameTextInputElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        if !self.disabled {
+        let focused = self.focus_handle.is_focused(window);
+        let kind = self.kind;
+        let active = self.owner.read(cx).active_text_input == Some(kind);
+
+        if should_handle_text_input(self.disabled, focused, active) {
             window.handle_input(
                 &self.focus_handle,
                 ElementInputHandler::new(bounds, self.owner.clone()),
@@ -149,8 +165,6 @@ impl Element for FrameTextInputElement {
             );
         }
 
-        let focused = self.focus_handle.is_focused(window);
-        let kind = self.kind;
         self.owner.update(cx, |root, cx| {
             if focused && root.active_text_input != Some(kind) {
                 root.active_text_input = Some(kind);
@@ -255,22 +269,34 @@ pub(in crate::app) fn frame_text_input(
                 )
                 .on_mouse_move(
                     cx.listener(move |root, event: &MouseMoveEvent, window, cx| {
-                        cx.stop_propagation();
-                        root.text_input_mouse_move(kind, event, window, cx);
+                        if should_capture_text_input_drag(
+                            root.text_input_runtime(kind).is_selecting,
+                        ) {
+                            cx.stop_propagation();
+                            root.text_input_mouse_move(kind, event, window, cx);
+                        }
                     }),
                 )
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(move |root, event: &MouseUpEvent, window, cx| {
-                        cx.stop_propagation();
+                        if should_capture_text_input_drag(
+                            root.text_input_runtime(kind).is_selecting,
+                        ) {
+                            cx.stop_propagation();
+                        }
                         root.text_input_mouse_up(kind, event, window, cx);
                     }),
                 )
                 .on_mouse_up_out(
                     MouseButton::Left,
                     cx.listener(move |root, event: &MouseUpEvent, window, cx| {
-                        cx.stop_propagation();
-                        root.text_input_mouse_up(kind, event, window, cx);
+                        if should_capture_text_input_drag(
+                            root.text_input_runtime(kind).is_selecting,
+                        ) {
+                            cx.stop_propagation();
+                            root.text_input_mouse_up(kind, event, window, cx);
+                        }
                     }),
                 )
         });

@@ -496,6 +496,9 @@ pub(in crate::app) fn settings_audio_codec_button(
             .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!is_enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(is_enabled, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             cx.stop_propagation();
             if !is_enabled {
@@ -558,6 +561,9 @@ pub(in crate::app) fn settings_audio_track_button(
             .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!is_enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(is_enabled, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             cx.stop_propagation();
             if !is_enabled {

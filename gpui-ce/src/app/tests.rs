@@ -1,3 +1,4 @@
+use super::input::{should_capture_text_input_drag, should_handle_text_input};
 use super::preview_panel::{
     centered_offset, preview_shell_state, preview_timeline_labels, preview_trim_enabled,
     preview_visual_controls_visible, timeline_fraction_from_percent,
@@ -323,6 +324,21 @@ mod frame_root_conversion {
                 .map(|file| file.config.audio_bitrate.as_str()),
             Some("128")
         );
+    }
+
+    #[test]
+    fn text_input_handler_is_scoped_to_the_active_focused_field() {
+        assert!(!should_handle_text_input(false, false, false));
+        assert!(!should_handle_text_input(false, true, false));
+        assert!(!should_handle_text_input(false, false, true));
+        assert!(should_handle_text_input(false, true, true));
+        assert!(!should_handle_text_input(true, true, true));
+    }
+
+    #[test]
+    fn text_input_outside_mouse_up_captures_only_while_selecting() {
+        assert!(!should_capture_text_input_drag(false));
+        assert!(should_capture_text_input_drag(true));
     }
 }
 

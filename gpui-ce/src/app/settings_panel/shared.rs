@@ -54,6 +54,9 @@ pub(in crate::app) fn settings_choice_button(
             .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
         .child(label)
 }
 

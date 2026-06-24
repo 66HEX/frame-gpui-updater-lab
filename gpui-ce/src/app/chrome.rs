@@ -234,9 +234,13 @@ pub(super) fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
                 .cursor_pointer()
         })
         .active(move |style| style.bg(color(colors.active_background)))
-        .child(icon_svg_inherit(
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
+        .child(icon_svg(
             assets::ICON_CLOSE,
             FILE_LIST_ACTION_ICON_SIZE,
+            color(colors.foreground),
         ))
 }
 
@@ -266,6 +270,9 @@ pub(super) fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::D
             .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
         .child("APPLY")
 }
 
@@ -474,6 +481,9 @@ pub(super) fn titlebar_segment(
             }
         })
         .active(move |style| style.bg(color(colors.active_background)))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             if root.active_view != view {
                 root.active_view = view;

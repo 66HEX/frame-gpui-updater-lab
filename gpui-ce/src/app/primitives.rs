@@ -75,6 +75,14 @@ pub(super) fn button_colors(variant: ButtonVariant, selected: bool, enabled: boo
     }
 }
 
+pub(super) fn button_mouse_down(enabled: bool, window: &mut Window, cx: &mut App) {
+    if enabled {
+        window.prevent_default();
+    } else {
+        cx.stop_propagation();
+    }
+}
+
 pub(super) fn action_button(
     icon: &'static str,
     label: Option<&'static str>,
@@ -104,7 +112,10 @@ pub(super) fn action_button(
                     .cursor_pointer()
             })
         })
-        .when(!enabled, |this| this.cursor_not_allowed());
+        .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        });
 
     if is_icon_only {
         button.w(px(TITLEBAR_ICON_BUTTON_SIZE)).child(icon_svg(
@@ -126,10 +137,6 @@ pub(super) fn icon_svg(path: &'static str, size: f32, icon_color: Rgba) -> impl 
         .w(px(size))
         .h(px(size))
         .text_color(icon_color)
-}
-
-pub(super) fn icon_svg_inherit(path: &'static str, size: f32) -> impl IntoElement {
-    svg().path(path).w(px(size)).h(px(size))
 }
 
 pub(super) fn parse_hex(hex: &str) -> Rgba {

@@ -81,6 +81,9 @@ pub(super) fn log_tab_button(
             color(theme::FRAME_GRAY_600)
         })
         .hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             if root
                 .conversion_events
