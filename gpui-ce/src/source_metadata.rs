@@ -5,12 +5,12 @@ use std::{collections::HashMap, env, process::Command};
 use frame_core::{
     error::ConversionError,
     probe::{ffprobe_json_args, parse_ffprobe_stdout},
-    types::ProbeMetadata,
+    types::{FfprobeTags, ProbeMetadata},
 };
 
 use crate::{
     file_queue::FileQueue,
-    settings::{AudioTrack, SourceKind, SourceMetadata, SubtitleTrack},
+    settings::{AudioTrack, SourceKind, SourceMetadata, SourceTags, SubtitleTrack},
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -124,8 +124,11 @@ pub fn source_metadata_from_probe(probe: ProbeMetadata) -> SourceMetadata {
             .map(|track| SubtitleTrack {
                 index: track.index,
                 codec: track.codec,
+                language: track.language,
+                label: track.label,
             })
             .collect(),
+        tags: probe.tags.map(source_tags_from_probe),
         pixel_format: probe.pixel_format,
         color_space: probe.color_space,
         color_range: probe.color_range,
@@ -168,6 +171,17 @@ fn source_kind_from_probe(kind: &str) -> Option<SourceKind> {
         "audio" => Some(SourceKind::Audio),
         "image" => Some(SourceKind::Image),
         _ => None,
+    }
+}
+
+fn source_tags_from_probe(tags: FfprobeTags) -> SourceTags {
+    SourceTags {
+        title: tags.title,
+        artist: tags.artist,
+        album: tags.album,
+        genre: tags.genre,
+        date: tags.date,
+        comment: tags.comment.or(tags.description_upper),
     }
 }
 
@@ -233,6 +247,28 @@ mod tests {
             });
 
             assert_eq!(metadata.subtitle_tracks[0].codec, "subrip");
+            assert_eq!(
+                metadata.subtitle_tracks[0].label.as_deref(),
+                Some("Captions")
+            );
+        }
+
+        #[test]
+        fn maps_format_tags_for_metadata_placeholders() {
+            let metadata = source_metadata_from_probe(ProbeMetadata {
+                tags: Some(FfprobeTags {
+                    title: Some("Original Title".to_string()),
+                    artist: Some("Frame".to_string()),
+                    comment: Some("Original Comment".to_string()),
+                    ..FfprobeTags::default()
+                }),
+                ..ProbeMetadata::default()
+            });
+
+            let tags = metadata.tags.as_ref().expect("tags should be mapped");
+            assert_eq!(tags.title.as_deref(), Some("Original Title"));
+            assert_eq!(tags.artist.as_deref(), Some("Frame"));
+            assert_eq!(tags.comment.as_deref(), Some("Original Comment"));
         }
     }
 

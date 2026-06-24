@@ -1,20 +1,22 @@
 use frame_core::{
     media_rules,
-    types::{ConversionConfig as CoreConversionConfig, ConversionTask, CropConfig, MetadataConfig},
+    types::{
+        ConversionConfig as CoreConversionConfig, ConversionTask, CropConfig,
+        MetadataConfig as CoreMetadataConfig, MetadataMode as CoreMetadataMode,
+    },
 };
 
 use crate::{
     file_queue::FileItem,
     settings::{
         ConversionConfig as GpuiConversionConfig, CropSettings, DEFAULT_AUDIO_BITRATE,
-        DEFAULT_AUDIO_BITRATE_MODE, DEFAULT_AUDIO_CHANNELS, DEFAULT_AUDIO_QUALITY,
+        DEFAULT_AUDIO_BITRATE_MODE, DEFAULT_AUDIO_CHANNELS, DEFAULT_AUDIO_QUALITY, DEFAULT_FPS,
+        DEFAULT_GIF_COLORS, DEFAULT_GIF_DITHER, DEFAULT_PIXEL_FORMAT, DEFAULT_PRESET,
+        DEFAULT_RESOLUTION, DEFAULT_SCALING_ALGORITHM, DEFAULT_VIDEO_BITRATE,
+        DEFAULT_VIDEO_BITRATE_MODE, DEFAULT_VIDEO_CODEC, MetadataConfig as GpuiMetadataConfig,
+        MetadataMode as GpuiMetadataMode,
     },
 };
-
-const DEFAULT_VIDEO_BITRATE: &str = "5000";
-const DEFAULT_CRF: u8 = 23;
-const DEFAULT_QUALITY: u32 = 50;
-const DEFAULT_PRESET: &str = "medium";
 
 #[must_use]
 pub fn conversion_task_from_file(file: &FileItem) -> ConversionTask {
@@ -33,9 +35,21 @@ pub fn core_config_from_gpui(config: &GpuiConversionConfig) -> CoreConversionCon
     CoreConversionConfig {
         processing_mode: config.processing_mode.id().to_string(),
         container: config.container.clone(),
-        video_codec: default_video_codec_for_container(&config.container),
-        video_bitrate_mode: "crf".to_string(),
-        video_bitrate: DEFAULT_VIDEO_BITRATE.to_string(),
+        video_codec: if config.video_codec.is_empty() {
+            default_video_codec_for_container(&config.container)
+        } else {
+            config.video_codec.clone()
+        },
+        video_bitrate_mode: if config.video_bitrate_mode.is_empty() {
+            DEFAULT_VIDEO_BITRATE_MODE.to_string()
+        } else {
+            config.video_bitrate_mode.clone()
+        },
+        video_bitrate: if config.video_bitrate.is_empty() {
+            DEFAULT_VIDEO_BITRATE.to_string()
+        } else {
+            config.video_bitrate.clone()
+        },
         audio_codec: config.audio_codec.clone(),
         audio_bitrate: if config.audio_bitrate.is_empty() {
             DEFAULT_AUDIO_BITRATE.to_string()
@@ -67,31 +81,72 @@ pub fn core_config_from_gpui(config: &GpuiConversionConfig) -> CoreConversionCon
         subtitle_font_color: None,
         subtitle_outline_color: None,
         subtitle_position: None,
-        resolution: "original".to_string(),
-        custom_width: None,
-        custom_height: None,
-        scaling_algorithm: "bicubic".to_string(),
-        fps: "original".to_string(),
-        crf: DEFAULT_CRF,
-        quality: DEFAULT_QUALITY,
-        preset: DEFAULT_PRESET.to_string(),
+        resolution: if config.resolution.is_empty() {
+            DEFAULT_RESOLUTION.to_string()
+        } else {
+            config.resolution.clone()
+        },
+        custom_width: config.custom_width.clone(),
+        custom_height: config.custom_height.clone(),
+        scaling_algorithm: if config.scaling_algorithm.is_empty() {
+            DEFAULT_SCALING_ALGORITHM.to_string()
+        } else {
+            config.scaling_algorithm.clone()
+        },
+        fps: if config.fps.is_empty() {
+            DEFAULT_FPS.to_string()
+        } else {
+            config.fps.clone()
+        },
+        crf: config.crf.min(51),
+        quality: config.quality.clamp(1, 100),
+        preset: if config.preset.is_empty() {
+            DEFAULT_PRESET.to_string()
+        } else {
+            config.preset.clone()
+        },
         start_time: config.start_time.clone(),
         end_time: config.end_time.clone(),
-        metadata: MetadataConfig::default(),
+        metadata: core_metadata_from_gpui(&config.metadata),
         rotation: config.rotation.clone(),
         flip_horizontal: config.flip_horizontal,
         flip_vertical: config.flip_vertical,
-        ml_upscale: None,
+        ml_upscale: (!config.ml_upscale.is_empty() && config.ml_upscale != "none")
+            .then_some(config.ml_upscale.clone()),
         crop: config.crop.as_ref().map(core_crop_from_gpui),
         overlay: None,
-        nvenc_spatial_aq: false,
-        nvenc_temporal_aq: false,
-        videotoolbox_allow_sw: false,
-        hw_decode: false,
-        pixel_format: "auto".to_string(),
-        gif_colors: 256,
-        gif_dither: "sierra2_4a".to_string(),
-        gif_loop: 0,
+        nvenc_spatial_aq: config.nvenc_spatial_aq,
+        nvenc_temporal_aq: config.nvenc_temporal_aq,
+        videotoolbox_allow_sw: config.videotoolbox_allow_sw,
+        hw_decode: config.hw_decode,
+        pixel_format: if config.pixel_format.is_empty() {
+            DEFAULT_PIXEL_FORMAT.to_string()
+        } else {
+            config.pixel_format.clone()
+        },
+        gif_colors: config.gif_colors.clamp(2, DEFAULT_GIF_COLORS),
+        gif_dither: if config.gif_dither.is_empty() {
+            DEFAULT_GIF_DITHER.to_string()
+        } else {
+            config.gif_dither.clone()
+        },
+        gif_loop: config.gif_loop,
+    }
+}
+
+fn core_metadata_from_gpui(metadata: &GpuiMetadataConfig) -> CoreMetadataConfig {
+    CoreMetadataConfig {
+        mode: match metadata.mode {
+            GpuiMetadataMode::Preserve => CoreMetadataMode::Preserve,
+            GpuiMetadataMode::Clean => CoreMetadataMode::Clean,
+            GpuiMetadataMode::Replace => CoreMetadataMode::Replace,
+        },
+        title: metadata.title.clone(),
+        artist: metadata.artist.clone(),
+        album: metadata.album.clone(),
+        genre: metadata.genre.clone(),
+        date: metadata.date.clone(),
+        comment: metadata.comment.clone(),
     }
 }
 
@@ -104,7 +159,7 @@ fn default_video_codec_for_container(container: &str) -> String {
         .iter()
         .find(|codec| media_rules::is_video_codec_allowed(container, codec))
         .cloned()
-        .unwrap_or_else(|| "libx264".to_string())
+        .unwrap_or_else(|| DEFAULT_VIDEO_CODEC.to_string())
 }
 
 fn core_crop_from_gpui(crop: &CropSettings) -> CropConfig {

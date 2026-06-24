@@ -4,6 +4,7 @@ pub(in crate::app) fn settings_audio_tab(
     config: &ConversionConfig,
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
+    available_encoders: &AvailableEncoders,
     audio_bitrate_focus: Option<&FocusHandle>,
     window: &Window,
     cx: &mut Context<FrameRoot>,
@@ -30,6 +31,7 @@ pub(in crate::app) fn settings_audio_tab(
         .child(channels_section)
         .child(settings_section("CODEC").child(settings_audio_codec_list(
             config,
+            available_encoders,
             settings_disabled,
             cx,
         )));
@@ -447,11 +449,12 @@ fn settings_audio_normalize_toggle(
 
 pub(in crate::app) fn settings_audio_codec_list(
     config: &ConversionConfig,
+    available_encoders: &AvailableEncoders,
     settings_disabled: bool,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
-    for option in audio_codec_options(config, settings_disabled) {
+    for option in audio_codec_options(config, available_encoders, settings_disabled) {
         list = list.child(settings_audio_codec_button(option, cx));
     }
 

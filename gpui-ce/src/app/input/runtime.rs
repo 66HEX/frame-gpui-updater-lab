@@ -5,6 +5,16 @@ pub(in crate::app) enum FrameTextInputKind {
     MaxConcurrency,
     OutputName,
     AudioBitrate,
+    VideoCustomWidth,
+    VideoCustomHeight,
+    VideoBitrate,
+    GifLoop,
+    MetadataTitle,
+    MetadataArtist,
+    MetadataAlbum,
+    MetadataGenre,
+    MetadataDate,
+    MetadataComment,
 }
 
 pub(in crate::app) struct FrameTextInputRuntime {

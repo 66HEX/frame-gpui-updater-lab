@@ -6,10 +6,21 @@ pub(super) fn sanitize_number_input(value: &str) -> String {
 
 pub(super) fn sanitize_replacement_text(kind: FrameTextInputKind, value: &str) -> String {
     match kind {
-        FrameTextInputKind::MaxConcurrency | FrameTextInputKind::AudioBitrate => {
-            sanitize_number_input(value)
+        FrameTextInputKind::MaxConcurrency
+        | FrameTextInputKind::AudioBitrate
+        | FrameTextInputKind::VideoCustomWidth
+        | FrameTextInputKind::VideoCustomHeight
+        | FrameTextInputKind::VideoBitrate
+        | FrameTextInputKind::GifLoop => sanitize_number_input(value),
+        FrameTextInputKind::OutputName
+        | FrameTextInputKind::MetadataTitle
+        | FrameTextInputKind::MetadataArtist
+        | FrameTextInputKind::MetadataAlbum
+        | FrameTextInputKind::MetadataGenre
+        | FrameTextInputKind::MetadataDate
+        | FrameTextInputKind::MetadataComment => {
+            value.chars().filter(|ch| !ch.is_control()).collect()
         }
-        FrameTextInputKind::OutputName => value.chars().filter(|ch| !ch.is_control()).collect(),
     }
 }
 

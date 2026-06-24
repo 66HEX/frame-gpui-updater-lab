@@ -65,20 +65,32 @@ use crate::{
         format_time, parse_time_to_seconds, preview_control_availability, transform_crop_rect,
     },
     settings::{
-        ConversionConfig, CropSettings, ProcessingMode, SettingsTab, SourceInfoSection, SourceKind,
-        SourceMetadata, apply_audio_bitrate, apply_audio_bitrate_mode, apply_audio_channels,
-        apply_audio_codec, apply_audio_normalize, apply_audio_quality, apply_audio_volume,
-        apply_output_container, apply_processing_mode, apply_trim_times, audio_channel_options,
+        ConversionConfig, CropSettings, MetadataField, ProcessingMode, SettingsTab,
+        SourceInfoSection, SourceKind, SourceMetadata, SourceTags, apply_audio_bitrate,
+        apply_audio_bitrate_mode, apply_audio_channels, apply_audio_codec, apply_audio_normalize,
+        apply_audio_quality, apply_audio_volume, apply_crf, apply_custom_height,
+        apply_custom_width, apply_fps, apply_gif_colors, apply_gif_dither, apply_gif_loop,
+        apply_hw_decode, apply_metadata_field, apply_metadata_mode, apply_ml_upscale,
+        apply_nvenc_spatial_aq, apply_nvenc_temporal_aq, apply_output_container,
+        apply_pixel_format, apply_processing_mode, apply_quality, apply_resolution,
+        apply_scaling_algorithm, apply_trim_times, apply_video_bitrate, apply_video_bitrate_mode,
+        apply_video_codec, apply_video_preset, apply_videotoolbox_allow_sw, audio_channel_options,
         audio_codec_options, audio_codec_supports_vbr, audio_quality_range, audio_track_options,
+        fps_options, gif_color_options, gif_dither_options, is_gif_container,
+        is_hardware_video_codec, is_nvenc_video_codec, is_videotoolbox_video_codec,
+        metadata_field_options, metadata_field_value, metadata_mode_options,
         normalize_output_config, output_container_options, output_processing_mode_options,
-        resolve_active_settings_tab, sanitize_output_name, source_info_sections,
-        toggle_audio_track_selection, visible_settings_tabs,
+        resolution_options, resolve_active_settings_tab, sanitize_output_name,
+        scaling_algorithm_options, source_info_sections, toggle_audio_track_selection,
+        video_codec_options, video_pixel_format_options, video_preset_options,
+        visible_settings_tabs,
     },
     source_metadata::{
         MetadataStatus, SourceMetadataEntry, SourceMetadataStore, probe_source_metadata,
     },
     theme, visual_fixture_from_env_value,
 };
+use frame_core::capabilities::AvailableEncoders;
 use frame_core::events::ConversionEvent;
 use frame_core::types::DEFAULT_MAX_CONCURRENCY;
 use gpui::{
@@ -163,16 +175,37 @@ pub struct FrameRoot {
     app_settings_value_focus: Option<FocusHandle>,
     settings_output_name_focus: Option<FocusHandle>,
     settings_audio_bitrate_focus: Option<FocusHandle>,
+    settings_video_width_focus: Option<FocusHandle>,
+    settings_video_height_focus: Option<FocusHandle>,
+    settings_video_bitrate_focus: Option<FocusHandle>,
+    settings_gif_loop_focus: Option<FocusHandle>,
+    settings_metadata_title_focus: Option<FocusHandle>,
+    settings_metadata_artist_focus: Option<FocusHandle>,
+    settings_metadata_album_focus: Option<FocusHandle>,
+    settings_metadata_genre_focus: Option<FocusHandle>,
+    settings_metadata_date_focus: Option<FocusHandle>,
+    settings_metadata_comment_focus: Option<FocusHandle>,
     active_text_input: Option<FrameTextInputKind>,
     max_concurrency_input: FrameTextInputRuntime,
     output_name_input: FrameTextInputRuntime,
     audio_bitrate_input: FrameTextInputRuntime,
+    video_width_input: FrameTextInputRuntime,
+    video_height_input: FrameTextInputRuntime,
+    video_bitrate_input: FrameTextInputRuntime,
+    gif_loop_input: FrameTextInputRuntime,
+    metadata_title_input: FrameTextInputRuntime,
+    metadata_artist_input: FrameTextInputRuntime,
+    metadata_album_input: FrameTextInputRuntime,
+    metadata_genre_input: FrameTextInputRuntime,
+    metadata_date_input: FrameTextInputRuntime,
+    metadata_comment_input: FrameTextInputRuntime,
     text_input_cursor_visible: bool,
     text_input_cursor_paused: bool,
     text_input_cursor_epoch: usize,
     text_input_cursor_task: Task<()>,
     source_metadata: SourceMetadataStore,
     conversion_processes: ConversionProcessController,
+    available_encoders: AvailableEncoders,
     preview_crop_file_id: Option<String>,
     preview_crop_mode: bool,
     preview_draft_crop: Option<CropRect>,
@@ -200,6 +233,30 @@ struct SettingsRenderState<'a> {
     output_name: &'a str,
     output_name_focus: Option<&'a FocusHandle>,
     audio_bitrate_focus: Option<&'a FocusHandle>,
+    video_width_focus: Option<&'a FocusHandle>,
+    video_height_focus: Option<&'a FocusHandle>,
+    video_bitrate_focus: Option<&'a FocusHandle>,
+    gif_loop_focus: Option<&'a FocusHandle>,
+    metadata_focuses: SettingsMetadataInputFocuses<'a>,
+    available_encoders: &'a AvailableEncoders,
+}
+
+#[derive(Clone, Copy)]
+struct SettingsVideoInputFocuses<'a> {
+    width: Option<&'a FocusHandle>,
+    height: Option<&'a FocusHandle>,
+    bitrate: Option<&'a FocusHandle>,
+    gif_loop: Option<&'a FocusHandle>,
+}
+
+#[derive(Clone, Copy)]
+struct SettingsMetadataInputFocuses<'a> {
+    title: Option<&'a FocusHandle>,
+    artist: Option<&'a FocusHandle>,
+    album: Option<&'a FocusHandle>,
+    genre: Option<&'a FocusHandle>,
+    date: Option<&'a FocusHandle>,
+    comment: Option<&'a FocusHandle>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

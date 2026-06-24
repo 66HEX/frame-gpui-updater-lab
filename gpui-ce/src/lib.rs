@@ -71,6 +71,9 @@ pub enum VisualFixture {
     LogsActive,
     PreviewCrop,
     PreviewReady,
+    SettingsImages,
+    SettingsMetadata,
+    SettingsVideo,
 }
 
 #[must_use]
@@ -80,6 +83,9 @@ pub fn visual_fixture_from_env_value(value: Option<&str>) -> Option<VisualFixtur
         Some("logs-active") => Some(VisualFixture::LogsActive),
         Some("preview-crop") => Some(VisualFixture::PreviewCrop),
         Some("preview-ready") => Some(VisualFixture::PreviewReady),
+        Some("settings-images") => Some(VisualFixture::SettingsImages),
+        Some("settings-metadata") => Some(VisualFixture::SettingsMetadata),
+        Some("settings-video") => Some(VisualFixture::SettingsVideo),
         _ => None,
     }
 }
@@ -236,6 +242,30 @@ mod tests {
             assert_eq!(
                 visual_fixture_from_env_value(Some("preview-crop")),
                 Some(VisualFixture::PreviewCrop)
+            );
+        }
+
+        #[test]
+        fn settings_metadata_value_enables_metadata_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("settings-metadata")),
+                Some(VisualFixture::SettingsMetadata)
+            );
+        }
+
+        #[test]
+        fn settings_video_value_enables_video_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("settings-video")),
+                Some(VisualFixture::SettingsVideo)
+            );
+        }
+
+        #[test]
+        fn settings_images_value_enables_images_fixture() {
+            assert_eq!(
+                visual_fixture_from_env_value(Some("settings-images")),
+                Some(VisualFixture::SettingsImages)
             );
         }
 

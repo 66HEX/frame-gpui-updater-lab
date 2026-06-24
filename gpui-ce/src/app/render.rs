@@ -40,6 +40,46 @@ impl Render for FrameRoot {
                     .settings_audio_bitrate_focus
                     .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
                     .clone();
+                let video_width_focus = self
+                    .settings_video_width_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let video_height_focus = self
+                    .settings_video_height_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let video_bitrate_focus = self
+                    .settings_video_bitrate_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let gif_loop_focus = self
+                    .settings_gif_loop_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_title_focus = self
+                    .settings_metadata_title_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_artist_focus = self
+                    .settings_metadata_artist_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_album_focus = self
+                    .settings_metadata_album_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_genre_focus = self
+                    .settings_metadata_genre_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_date_focus = self
+                    .settings_metadata_date_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
+                let metadata_comment_focus = self
+                    .settings_metadata_comment_focus
+                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+                    .clone();
                 content.child(workspace_view(
                     &self.file_queue,
                     SettingsRenderState {
@@ -52,6 +92,19 @@ impl Render for FrameRoot {
                         output_name: &selected_output_name,
                         output_name_focus: Some(&output_name_focus),
                         audio_bitrate_focus: Some(&audio_bitrate_focus),
+                        video_width_focus: Some(&video_width_focus),
+                        video_height_focus: Some(&video_height_focus),
+                        video_bitrate_focus: Some(&video_bitrate_focus),
+                        gif_loop_focus: Some(&gif_loop_focus),
+                        metadata_focuses: SettingsMetadataInputFocuses {
+                            title: Some(&metadata_title_focus),
+                            artist: Some(&metadata_artist_focus),
+                            album: Some(&metadata_album_focus),
+                            genre: Some(&metadata_genre_focus),
+                            date: Some(&metadata_date_focus),
+                            comment: Some(&metadata_comment_focus),
+                        },
+                        available_encoders: &self.available_encoders,
                     },
                     preview_crop,
                     window,

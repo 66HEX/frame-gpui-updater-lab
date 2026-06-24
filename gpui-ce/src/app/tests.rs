@@ -270,6 +270,35 @@ mod frame_root_conversion {
     }
 
     #[test]
+    fn metadata_title_input_inserts_free_text_at_selection() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.file_queue
+            .selected_file_mut()
+            .unwrap()
+            .config
+            .metadata
+            .title = Some("Render".to_string());
+        root.metadata_title_input.selected_range = 6..6;
+
+        assert!(root.replace_text_input_range(
+            FrameTextInputKind::MetadataTitle,
+            None,
+            " Title",
+            None,
+            false,
+        ));
+
+        assert_eq!(
+            root.file_queue
+                .selected_file()
+                .and_then(|file| file.config.metadata.title.as_deref()),
+            Some("Render Title")
+        );
+    }
+
+    #[test]
     fn audio_bitrate_input_inserts_digits_at_selection() {
         let mut root = FrameRoot::new();
         root.file_queue
@@ -745,6 +774,50 @@ mod visual_fixtures {
         assert!(root.preview_draft_crop.is_some());
         assert_eq!(root.preview_crop_aspect, "1:1");
     }
+
+    #[test]
+    fn settings_metadata_fixture_opens_metadata_tab_with_source_tags() {
+        let mut root = FrameRoot::new();
+
+        root.apply_visual_fixture(Some(VisualFixture::SettingsMetadata));
+
+        assert_eq!(root.settings_active_tab, SettingsTab::Metadata);
+        assert_eq!(
+            root.selected_source_metadata()
+                .and_then(|metadata| metadata.tags)
+                .and_then(|tags| tags.title),
+            Some("Original Scene 24A".to_string())
+        );
+    }
+
+    #[test]
+    fn settings_video_fixture_opens_video_tab() {
+        let mut root = FrameRoot::new();
+
+        root.apply_visual_fixture(Some(VisualFixture::SettingsVideo));
+
+        assert_eq!(root.settings_active_tab, SettingsTab::Video);
+        assert_eq!(
+            root.file_queue
+                .selected_file()
+                .and_then(|file| file.config.custom_width.as_deref()),
+            Some("1920")
+        );
+    }
+
+    #[test]
+    fn settings_images_fixture_opens_images_tab_for_image_source() {
+        let mut root = FrameRoot::new();
+
+        root.apply_visual_fixture(Some(VisualFixture::SettingsImages));
+
+        assert_eq!(root.settings_active_tab, SettingsTab::Images);
+        assert_eq!(
+            root.selected_source_metadata()
+                .map(|metadata| metadata.source_kind()),
+            Some(SourceKind::Image)
+        );
+    }
 }
 
 mod button_state_colors {
@@ -798,6 +871,20 @@ mod button_state_colors {
 mod preview_shell {
     use super::*;
 
+    fn empty_encoders() -> &'static AvailableEncoders {
+        static ENCODERS: AvailableEncoders = AvailableEncoders {
+            h264_videotoolbox: false,
+            h264_nvenc: false,
+            hevc_videotoolbox: false,
+            hevc_nvenc: false,
+            av1_nvenc: false,
+            ml_upscale: false,
+            libfdk_aac: false,
+            libmp3lame: false,
+        };
+        &ENCODERS
+    }
+
     fn settings_state<'a>(
         config: &'a ConversionConfig,
         metadata: Option<&'a SourceMetadata>,
@@ -813,6 +900,19 @@ mod preview_shell {
             output_name: "",
             output_name_focus: None,
             audio_bitrate_focus: None,
+            video_width_focus: None,
+            video_height_focus: None,
+            video_bitrate_focus: None,
+            gif_loop_focus: None,
+            metadata_focuses: SettingsMetadataInputFocuses {
+                title: None,
+                artist: None,
+                album: None,
+                genre: None,
+                date: None,
+                comment: None,
+            },
+            available_encoders: empty_encoders(),
         }
     }
 

@@ -53,6 +53,20 @@ pub fn is_video_stream_codec_allowed_for_container(container: &str, codec: &str)
 }
 
 #[must_use]
+pub fn is_video_codec_allowed_for_container(container: &str, codec: &str) -> bool {
+    media_rules::is_video_codec_allowed(container, codec)
+}
+
+#[must_use]
+pub fn is_video_pixel_format_allowed_for_container(
+    container: &str,
+    encoder: &str,
+    pixel_format: &str,
+) -> bool {
+    media_rules::is_video_pixel_format_allowed(container, encoder, pixel_format)
+}
+
+#[must_use]
 pub fn is_subtitle_codec_allowed_for_container(container: &str, codec: &str) -> bool {
     media_rules::is_subtitle_codec_allowed(container, codec)
 }

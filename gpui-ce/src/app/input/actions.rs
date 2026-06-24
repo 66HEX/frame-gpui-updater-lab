@@ -9,6 +9,16 @@ impl FrameRoot {
             FrameTextInputKind::MaxConcurrency => &self.max_concurrency_input,
             FrameTextInputKind::OutputName => &self.output_name_input,
             FrameTextInputKind::AudioBitrate => &self.audio_bitrate_input,
+            FrameTextInputKind::VideoCustomWidth => &self.video_width_input,
+            FrameTextInputKind::VideoCustomHeight => &self.video_height_input,
+            FrameTextInputKind::VideoBitrate => &self.video_bitrate_input,
+            FrameTextInputKind::GifLoop => &self.gif_loop_input,
+            FrameTextInputKind::MetadataTitle => &self.metadata_title_input,
+            FrameTextInputKind::MetadataArtist => &self.metadata_artist_input,
+            FrameTextInputKind::MetadataAlbum => &self.metadata_album_input,
+            FrameTextInputKind::MetadataGenre => &self.metadata_genre_input,
+            FrameTextInputKind::MetadataDate => &self.metadata_date_input,
+            FrameTextInputKind::MetadataComment => &self.metadata_comment_input,
         }
     }
 
@@ -20,6 +30,16 @@ impl FrameRoot {
             FrameTextInputKind::MaxConcurrency => &mut self.max_concurrency_input,
             FrameTextInputKind::OutputName => &mut self.output_name_input,
             FrameTextInputKind::AudioBitrate => &mut self.audio_bitrate_input,
+            FrameTextInputKind::VideoCustomWidth => &mut self.video_width_input,
+            FrameTextInputKind::VideoCustomHeight => &mut self.video_height_input,
+            FrameTextInputKind::VideoBitrate => &mut self.video_bitrate_input,
+            FrameTextInputKind::GifLoop => &mut self.gif_loop_input,
+            FrameTextInputKind::MetadataTitle => &mut self.metadata_title_input,
+            FrameTextInputKind::MetadataArtist => &mut self.metadata_artist_input,
+            FrameTextInputKind::MetadataAlbum => &mut self.metadata_album_input,
+            FrameTextInputKind::MetadataGenre => &mut self.metadata_genre_input,
+            FrameTextInputKind::MetadataDate => &mut self.metadata_date_input,
+            FrameTextInputKind::MetadataComment => &mut self.metadata_comment_input,
         }
     }
 
@@ -31,6 +51,16 @@ impl FrameRoot {
             FrameTextInputKind::MaxConcurrency => self.app_settings_value_focus.as_ref(),
             FrameTextInputKind::OutputName => self.settings_output_name_focus.as_ref(),
             FrameTextInputKind::AudioBitrate => self.settings_audio_bitrate_focus.as_ref(),
+            FrameTextInputKind::VideoCustomWidth => self.settings_video_width_focus.as_ref(),
+            FrameTextInputKind::VideoCustomHeight => self.settings_video_height_focus.as_ref(),
+            FrameTextInputKind::VideoBitrate => self.settings_video_bitrate_focus.as_ref(),
+            FrameTextInputKind::GifLoop => self.settings_gif_loop_focus.as_ref(),
+            FrameTextInputKind::MetadataTitle => self.settings_metadata_title_focus.as_ref(),
+            FrameTextInputKind::MetadataArtist => self.settings_metadata_artist_focus.as_ref(),
+            FrameTextInputKind::MetadataAlbum => self.settings_metadata_album_focus.as_ref(),
+            FrameTextInputKind::MetadataGenre => self.settings_metadata_genre_focus.as_ref(),
+            FrameTextInputKind::MetadataDate => self.settings_metadata_date_focus.as_ref(),
+            FrameTextInputKind::MetadataComment => self.settings_metadata_comment_focus.as_ref(),
         }
     }
 
@@ -53,6 +83,56 @@ impl FrameRoot {
             .is_some_and(|focus| focus.is_focused(window))
         {
             Some(FrameTextInputKind::AudioBitrate)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::VideoCustomWidth)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::VideoCustomWidth)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::VideoCustomHeight)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::VideoCustomHeight)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::VideoBitrate)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::VideoBitrate)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::GifLoop)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::GifLoop)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataTitle)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataTitle)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataArtist)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataArtist)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataAlbum)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataAlbum)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataGenre)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataGenre)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataDate)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataDate)
+        } else if self
+            .text_input_focus_handle(FrameTextInputKind::MetadataComment)
+            .is_some_and(|focus| focus.is_focused(window))
+        {
+            Some(FrameTextInputKind::MetadataComment)
         } else {
             None
         }
@@ -71,6 +151,16 @@ impl FrameRoot {
             FrameTextInputKind::MaxConcurrency => false,
             FrameTextInputKind::OutputName => self.file_queue.selected_file_locked(),
             FrameTextInputKind::AudioBitrate => self.file_queue.selected_file_locked(),
+            FrameTextInputKind::VideoCustomWidth
+            | FrameTextInputKind::VideoCustomHeight
+            | FrameTextInputKind::VideoBitrate
+            | FrameTextInputKind::GifLoop
+            | FrameTextInputKind::MetadataTitle
+            | FrameTextInputKind::MetadataArtist
+            | FrameTextInputKind::MetadataAlbum
+            | FrameTextInputKind::MetadataGenre
+            | FrameTextInputKind::MetadataDate
+            | FrameTextInputKind::MetadataComment => self.file_queue.selected_file_locked(),
         }
     }
 
@@ -85,6 +175,38 @@ impl FrameRoot {
                 .file_queue
                 .selected_file()
                 .map_or_else(String::new, |file| file.config.audio_bitrate.clone()),
+            FrameTextInputKind::VideoCustomWidth => self
+                .file_queue
+                .selected_file()
+                .and_then(|file| file.config.custom_width.clone())
+                .unwrap_or_default(),
+            FrameTextInputKind::VideoCustomHeight => self
+                .file_queue
+                .selected_file()
+                .and_then(|file| file.config.custom_height.clone())
+                .unwrap_or_default(),
+            FrameTextInputKind::VideoBitrate => self
+                .file_queue
+                .selected_file()
+                .map_or_else(String::new, |file| file.config.video_bitrate.clone()),
+            FrameTextInputKind::GifLoop => self
+                .file_queue
+                .selected_file()
+                .map_or_else(String::new, |file| file.config.gif_loop.to_string()),
+            FrameTextInputKind::MetadataTitle
+            | FrameTextInputKind::MetadataArtist
+            | FrameTextInputKind::MetadataAlbum
+            | FrameTextInputKind::MetadataGenre
+            | FrameTextInputKind::MetadataDate
+            | FrameTextInputKind::MetadataComment => self
+                .file_queue
+                .selected_file()
+                .and_then(|file| {
+                    metadata_field_for_text_input(kind).and_then(|field| {
+                        metadata_field_value(&file.config, field).map(str::to_string)
+                    })
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -119,6 +241,61 @@ impl FrameRoot {
                     apply_audio_bitrate(&mut file.config, &next);
                 })?;
                 Some(next)
+            }
+            FrameTextInputKind::VideoCustomWidth => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next = sanitize_number_input(candidate);
+                self.file_queue.selected_file_mut().map(|file| {
+                    apply_custom_width(&mut file.config, &next);
+                })?;
+                Some(next)
+            }
+            FrameTextInputKind::VideoCustomHeight => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next = sanitize_number_input(candidate);
+                self.file_queue.selected_file_mut().map(|file| {
+                    apply_custom_height(&mut file.config, &next);
+                })?;
+                Some(next)
+            }
+            FrameTextInputKind::VideoBitrate => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next = sanitize_number_input(candidate);
+                self.file_queue.selected_file_mut().map(|file| {
+                    apply_video_bitrate(&mut file.config, &next);
+                })?;
+                Some(next)
+            }
+            FrameTextInputKind::GifLoop => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let next = sanitize_number_input(candidate);
+                self.file_queue.selected_file_mut().map(|file| {
+                    apply_gif_loop(&mut file.config, &next);
+                })?;
+                Some(file_gif_loop_value(&self.file_queue))
+            }
+            FrameTextInputKind::MetadataTitle
+            | FrameTextInputKind::MetadataArtist
+            | FrameTextInputKind::MetadataAlbum
+            | FrameTextInputKind::MetadataGenre
+            | FrameTextInputKind::MetadataDate
+            | FrameTextInputKind::MetadataComment => {
+                if self.file_queue.selected_file_locked() {
+                    return None;
+                }
+                let field = metadata_field_for_text_input(kind)?;
+                self.file_queue.selected_file_mut().map(|file| {
+                    apply_metadata_field(&mut file.config, field, candidate);
+                })?;
+                Some(candidate.to_string())
             }
         }
     }
@@ -594,5 +771,23 @@ impl FrameRoot {
                 });
             }
         });
+    }
+}
+
+fn file_gif_loop_value(file_queue: &FileQueue) -> String {
+    file_queue
+        .selected_file()
+        .map_or_else(String::new, |file| file.config.gif_loop.to_string())
+}
+
+fn metadata_field_for_text_input(kind: FrameTextInputKind) -> Option<MetadataField> {
+    match kind {
+        FrameTextInputKind::MetadataTitle => Some(MetadataField::Title),
+        FrameTextInputKind::MetadataArtist => Some(MetadataField::Artist),
+        FrameTextInputKind::MetadataAlbum => Some(MetadataField::Album),
+        FrameTextInputKind::MetadataGenre => Some(MetadataField::Genre),
+        FrameTextInputKind::MetadataDate => Some(MetadataField::Date),
+        FrameTextInputKind::MetadataComment => Some(MetadataField::Comment),
+        _ => None,
     }
 }

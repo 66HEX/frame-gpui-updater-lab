@@ -1,4 +1,12 @@
-use super::{model::*, rules::*};
+use super::{
+    model::*,
+    options::{
+        first_allowed_video_codec, first_allowed_video_pixel_format, first_allowed_video_preset,
+        is_hardware_video_codec, is_nvenc_video_codec, is_video_preset_allowed,
+        is_videotoolbox_video_codec,
+    },
+    rules::*,
+};
 
 #[must_use]
 pub fn sanitize_output_name(value: &str) -> String {
@@ -129,6 +137,296 @@ pub fn apply_audio_normalize(config: &mut ConversionConfig, enabled: bool) -> bo
     true
 }
 
+pub fn apply_metadata_mode(config: &mut ConversionConfig, mode: MetadataMode) -> bool {
+    if config.metadata.mode == mode {
+        return false;
+    }
+
+    config.metadata.mode = mode;
+    true
+}
+
+pub fn apply_metadata_field(
+    config: &mut ConversionConfig,
+    field: MetadataField,
+    value: &str,
+) -> bool {
+    let value = if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    };
+
+    let target = match field {
+        MetadataField::Title => &mut config.metadata.title,
+        MetadataField::Artist => &mut config.metadata.artist,
+        MetadataField::Album => &mut config.metadata.album,
+        MetadataField::Genre => &mut config.metadata.genre,
+        MetadataField::Date => &mut config.metadata.date,
+        MetadataField::Comment => &mut config.metadata.comment,
+    };
+
+    if *target == value {
+        return false;
+    }
+
+    *target = value;
+    true
+}
+
+pub fn apply_resolution(config: &mut ConversionConfig, resolution: &str) -> bool {
+    let resolution = resolution.to_ascii_lowercase();
+    if !RESOLUTION_OPTIONS.contains(&resolution.as_str()) {
+        return false;
+    }
+
+    if config.resolution == resolution {
+        return false;
+    }
+
+    config.resolution = resolution;
+    true
+}
+
+pub fn apply_custom_width(config: &mut ConversionConfig, width: &str) -> bool {
+    let width = sanitized_optional_number(width);
+    if config.custom_width == width {
+        return false;
+    }
+
+    config.custom_width = width;
+    true
+}
+
+pub fn apply_custom_height(config: &mut ConversionConfig, height: &str) -> bool {
+    let height = sanitized_optional_number(height);
+    if config.custom_height == height {
+        return false;
+    }
+
+    config.custom_height = height;
+    true
+}
+
+pub fn apply_scaling_algorithm(config: &mut ConversionConfig, algorithm: &str) -> bool {
+    let algorithm = algorithm.to_ascii_lowercase();
+    if !SCALING_ALGORITHM_OPTIONS.contains(&algorithm.as_str()) {
+        return false;
+    }
+
+    if config.scaling_algorithm == algorithm {
+        return false;
+    }
+
+    config.scaling_algorithm = algorithm;
+    true
+}
+
+pub fn apply_ml_upscale(
+    config: &mut ConversionConfig,
+    mode: &str,
+    ml_upscale_available: bool,
+) -> bool {
+    let mode = mode.to_ascii_lowercase();
+    if !matches!(mode.as_str(), "none" | "esrgan-2x" | "esrgan-4x") {
+        return false;
+    }
+    if mode != "none" && (!ml_upscale_available || is_gif_container(&config.container)) {
+        return false;
+    }
+
+    let changed = config.ml_upscale != mode;
+    config.ml_upscale = mode;
+    changed | normalize_video_config(config, None, ml_upscale_available)
+}
+
+pub fn apply_fps(config: &mut ConversionConfig, fps: &str) -> bool {
+    let valid = if is_gif_container(&config.container) {
+        GIF_FPS_OPTIONS.contains(&fps)
+    } else {
+        FPS_OPTIONS.contains(&fps)
+    };
+    if !valid {
+        return false;
+    }
+
+    if config.fps == fps {
+        return false;
+    }
+
+    config.fps = fps.to_string();
+    true
+}
+
+pub fn apply_gif_colors(config: &mut ConversionConfig, colors: u16) -> bool {
+    let colors = colors.clamp(2, MAX_GIF_COLORS);
+    if config.gif_colors == colors {
+        return false;
+    }
+
+    config.gif_colors = colors;
+    true
+}
+
+pub fn apply_gif_dither(config: &mut ConversionConfig, dither: &str) -> bool {
+    let dither = dither.to_ascii_lowercase();
+    if !GIF_DITHER_OPTIONS.contains(&dither.as_str()) {
+        return false;
+    }
+
+    if config.gif_dither == dither {
+        return false;
+    }
+
+    config.gif_dither = dither;
+    true
+}
+
+pub fn apply_gif_loop(config: &mut ConversionConfig, loop_count: &str) -> bool {
+    let parsed = loop_count
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>()
+        .parse::<u32>()
+        .unwrap_or(0)
+        .min(u32::from(MAX_GIF_LOOP)) as u16;
+
+    if config.gif_loop == parsed {
+        return false;
+    }
+
+    config.gif_loop = parsed;
+    true
+}
+
+pub fn apply_video_codec(config: &mut ConversionConfig, codec: &str) -> bool {
+    let codec = codec.to_ascii_lowercase();
+    if !is_known_video_codec(&codec)
+        || !is_video_codec_allowed_for_container(&config.container, &codec)
+    {
+        return false;
+    }
+
+    let changed = config.video_codec != codec;
+    config.video_codec = codec;
+    changed | normalize_video_config(config, None, true)
+}
+
+pub fn apply_pixel_format(config: &mut ConversionConfig, pixel_format: &str) -> bool {
+    let pixel_format = pixel_format.to_ascii_lowercase();
+    if !is_known_pixel_format(&pixel_format)
+        || !is_video_pixel_format_allowed_for_container(
+            &config.container,
+            &config.video_codec,
+            &pixel_format,
+        )
+    {
+        return false;
+    }
+
+    if config.pixel_format == pixel_format {
+        return false;
+    }
+
+    config.pixel_format = pixel_format;
+    true
+}
+
+pub fn apply_video_preset(config: &mut ConversionConfig, preset: &str) -> bool {
+    let preset = preset.to_ascii_lowercase();
+    if !is_video_preset_allowed(&config.video_codec, &preset) {
+        return false;
+    }
+
+    if config.preset == preset {
+        return false;
+    }
+
+    config.preset = preset;
+    true
+}
+
+pub fn apply_video_bitrate_mode(config: &mut ConversionConfig, mode: &str) -> bool {
+    let mode = mode.to_ascii_lowercase();
+    if !matches!(mode.as_str(), "crf" | "bitrate") {
+        return false;
+    }
+
+    if config.video_bitrate_mode == mode {
+        return false;
+    }
+
+    config.video_bitrate_mode = mode;
+    true
+}
+
+pub fn apply_video_bitrate(config: &mut ConversionConfig, bitrate: &str) -> bool {
+    let bitrate: String = bitrate.chars().filter(char::is_ascii_digit).collect();
+    if config.video_bitrate == bitrate {
+        return false;
+    }
+
+    config.video_bitrate = bitrate;
+    true
+}
+
+pub fn apply_crf(config: &mut ConversionConfig, crf: u8) -> bool {
+    let crf = crf.min(51);
+    if config.crf == crf {
+        return false;
+    }
+
+    config.crf = crf;
+    true
+}
+
+pub fn apply_quality(config: &mut ConversionConfig, quality: u32) -> bool {
+    let quality = quality.clamp(1, 100);
+    if config.quality == quality {
+        return false;
+    }
+
+    config.quality = quality;
+    true
+}
+
+pub fn apply_nvenc_spatial_aq(config: &mut ConversionConfig, enabled: bool) -> bool {
+    if !is_nvenc_video_codec(&config.video_codec) || config.nvenc_spatial_aq == enabled {
+        return false;
+    }
+
+    config.nvenc_spatial_aq = enabled;
+    true
+}
+
+pub fn apply_nvenc_temporal_aq(config: &mut ConversionConfig, enabled: bool) -> bool {
+    if !is_nvenc_video_codec(&config.video_codec) || config.nvenc_temporal_aq == enabled {
+        return false;
+    }
+
+    config.nvenc_temporal_aq = enabled;
+    true
+}
+
+pub fn apply_videotoolbox_allow_sw(config: &mut ConversionConfig, enabled: bool) -> bool {
+    if !is_videotoolbox_video_codec(&config.video_codec) || config.videotoolbox_allow_sw == enabled
+    {
+        return false;
+    }
+
+    config.videotoolbox_allow_sw = enabled;
+    true
+}
+
+pub fn apply_hw_decode(config: &mut ConversionConfig, enabled: bool) -> bool {
+    if !is_hardware_video_codec(&config.video_codec) || config.hw_decode == enabled {
+        return false;
+    }
+
+    config.hw_decode = enabled;
+    true
+}
+
 pub fn apply_processing_mode(
     config: &mut ConversionConfig,
     metadata: Option<&SourceMetadata>,
@@ -157,6 +455,7 @@ pub fn apply_output_container(config: &mut ConversionConfig, container: &str) ->
     }
 
     normalize_audio_encoding_settings(config);
+    normalize_video_config(config, None, true);
     changed
 }
 
@@ -203,6 +502,9 @@ pub fn normalize_output_config(
         config.start_time = None;
         config.end_time = None;
         config.selected_audio_tracks.clear();
+        config.selected_subtitle_tracks.clear();
+        config.metadata.album = None;
+        config.metadata.genre = None;
         reset_audio_filter_settings(config);
     }
 
@@ -218,6 +520,7 @@ pub fn normalize_output_config(
 
     if config.processing_mode == ProcessingMode::Copy {
         reset_audio_filter_settings(config);
+        reset_video_filter_settings(config);
     }
 
     if !container_supports_audio(&config.container) {
@@ -232,6 +535,89 @@ pub fn normalize_output_config(
         config.audio_codec = default_audio_codec_for_container(&config.container).to_string();
     }
     normalize_audio_encoding_settings(config);
+    normalize_video_config(config, metadata, true);
+
+    before != *config
+}
+
+pub fn normalize_video_config(
+    config: &mut ConversionConfig,
+    metadata: Option<&SourceMetadata>,
+    ml_upscale_available: bool,
+) -> bool {
+    let before = config.clone();
+    let source_kind = source_kind_for(metadata);
+    let is_audio_container = is_audio_only_container(&config.container);
+    let is_gif_output = is_gif_container(&config.container);
+
+    if config.processing_mode == ProcessingMode::Copy {
+        reset_video_filter_settings(config);
+    }
+
+    if source_kind == SourceKind::Image {
+        config.processing_mode = ProcessingMode::Reencode;
+        config.selected_audio_tracks.clear();
+        config.selected_subtitle_tracks.clear();
+    }
+
+    if is_audio_container {
+        config.pixel_format = DEFAULT_PIXEL_FORMAT.to_string();
+        config.ml_upscale = "none".to_string();
+        config.selected_subtitle_tracks.clear();
+    }
+
+    if is_gif_output {
+        config.pixel_format = DEFAULT_PIXEL_FORMAT.to_string();
+        config.video_codec = "gif".to_string();
+        config.video_bitrate_mode = DEFAULT_VIDEO_BITRATE_MODE.to_string();
+        config.ml_upscale = "none".to_string();
+        config.hw_decode = false;
+        config.nvenc_spatial_aq = false;
+        config.nvenc_temporal_aq = false;
+        config.videotoolbox_allow_sw = false;
+    } else if !is_audio_container
+        && !is_video_codec_allowed_for_container(&config.container, &config.video_codec)
+    {
+        config.video_codec = first_allowed_video_codec(&config.container, None);
+    }
+
+    if !is_video_pixel_format_allowed_for_container(
+        &config.container,
+        &config.video_codec,
+        &config.pixel_format,
+    ) {
+        config.pixel_format =
+            first_allowed_video_pixel_format(&config.container, &config.video_codec).to_string();
+    }
+
+    if config.ml_upscale != "none" && (!ml_upscale_available || config.resolution != "original") {
+        if config.resolution != "original" {
+            config.resolution = "original".to_string();
+        }
+        if !ml_upscale_available {
+            config.ml_upscale = "none".to_string();
+        }
+    }
+
+    if !is_video_preset_allowed(&config.video_codec, &config.preset) {
+        config.preset = first_allowed_video_preset(&config.video_codec).to_string();
+    }
+
+    if !is_nvenc_video_codec(&config.video_codec) {
+        config.nvenc_spatial_aq = false;
+        config.nvenc_temporal_aq = false;
+    }
+    if !is_videotoolbox_video_codec(&config.video_codec) {
+        config.videotoolbox_allow_sw = false;
+    }
+    if !is_hardware_video_codec(&config.video_codec) {
+        config.hw_decode = false;
+    }
+
+    config.gif_colors = config.gif_colors.clamp(2, MAX_GIF_COLORS);
+    if !GIF_DITHER_OPTIONS.contains(&config.gif_dither.as_str()) {
+        config.gif_dither = DEFAULT_GIF_DITHER.to_string();
+    }
 
     before != *config
 }
@@ -255,6 +641,23 @@ fn reset_audio_filter_settings(config: &mut ConversionConfig) {
     config.audio_normalize = false;
     config.audio_volume = DEFAULT_AUDIO_VOLUME;
     config.audio_bitrate_mode = DEFAULT_AUDIO_BITRATE_MODE.to_string();
+}
+
+fn reset_video_filter_settings(config: &mut ConversionConfig) {
+    config.pixel_format = DEFAULT_PIXEL_FORMAT.to_string();
+    config.resolution = DEFAULT_RESOLUTION.to_string();
+    config.custom_width = None;
+    config.custom_height = None;
+    config.fps = DEFAULT_FPS.to_string();
+    config.rotation = "0".to_string();
+    config.flip_horizontal = false;
+    config.flip_vertical = false;
+    config.crop = None;
+    config.ml_upscale = "none".to_string();
+    config.hw_decode = false;
+    config.nvenc_spatial_aq = false;
+    config.nvenc_temporal_aq = false;
+    config.videotoolbox_allow_sw = false;
 }
 
 #[must_use]
@@ -304,4 +707,21 @@ fn is_known_audio_channels(channels: &str) -> bool {
     AUDIO_CHANNEL_DEFINITIONS
         .iter()
         .any(|definition| definition.id == channels)
+}
+
+fn is_known_video_codec(codec: &str) -> bool {
+    VIDEO_CODEC_DEFINITIONS
+        .iter()
+        .any(|definition| definition.codec == codec)
+}
+
+fn is_known_pixel_format(pixel_format: &str) -> bool {
+    VIDEO_PIXEL_FORMAT_DEFINITIONS
+        .iter()
+        .any(|definition| definition.id == pixel_format)
+}
+
+fn sanitized_optional_number(value: &str) -> Option<String> {
+    let value: String = value.chars().filter(char::is_ascii_digit).collect();
+    (!value.is_empty()).then_some(value)
 }

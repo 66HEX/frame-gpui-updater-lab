@@ -1,11 +1,27 @@
 use frame_core::media_rules;
 
+pub const DEFAULT_VIDEO_CODEC: &str = "libx264";
+pub const DEFAULT_VIDEO_BITRATE_MODE: &str = "crf";
+pub const DEFAULT_VIDEO_BITRATE: &str = "5000";
+pub const DEFAULT_RESOLUTION: &str = "original";
+pub const DEFAULT_SCALING_ALGORITHM: &str = "bicubic";
+pub const DEFAULT_FPS: &str = "original";
+pub const DEFAULT_CRF: u8 = 23;
+pub const DEFAULT_QUALITY: u32 = 50;
+pub const DEFAULT_PRESET: &str = "medium";
+pub const DEFAULT_PIXEL_FORMAT: &str = "auto";
+pub const DEFAULT_GIF_COLORS: u16 = 256;
+pub const DEFAULT_GIF_DITHER: &str = "sierra2_4a";
+pub const DEFAULT_GIF_LOOP: u16 = 0;
 pub const DEFAULT_AUDIO_BITRATE: &str = "128";
 pub const DEFAULT_AUDIO_BITRATE_MODE: &str = "bitrate";
 pub const DEFAULT_AUDIO_QUALITY: &str = "4";
 pub const DEFAULT_AUDIO_CHANNELS: &str = "original";
 pub const DEFAULT_AUDIO_VOLUME: u32 = 100;
+pub const DEFAULT_METADATA_MODE: MetadataMode = MetadataMode::Preserve;
 pub(super) const MAX_AUDIO_VOLUME: u32 = 200;
+pub(super) const MAX_GIF_LOOP: u16 = 65_535;
+pub(super) const MAX_GIF_COLORS: u16 = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsTab {
@@ -97,10 +113,161 @@ impl ProcessingMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MetadataMode {
+    #[default]
+    Preserve,
+    Clean,
+    Replace,
+}
+
+impl MetadataMode {
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Preserve => "preserve",
+            Self::Clean => "clean",
+            Self::Replace => "replace",
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Preserve => "Preserve",
+            Self::Clean => "Clean",
+            Self::Replace => "Replace",
+        }
+    }
+
+    #[must_use]
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Preserve => {
+                "Keeps original metadata. Values entered below will overwrite specific fields."
+            }
+            Self::Clean => "Removes all metadata tags from the output file.",
+            Self::Replace => "Removes original metadata and adds only the values entered below.",
+        }
+    }
+
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "preserve" => Some(Self::Preserve),
+            "clean" => Some(Self::Clean),
+            "replace" => Some(Self::Replace),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataConfig {
+    pub mode: MetadataMode,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub date: Option<String>,
+    pub comment: Option<String>,
+}
+
+impl Default for MetadataConfig {
+    fn default() -> Self {
+        Self {
+            mode: DEFAULT_METADATA_MODE,
+            title: None,
+            artist: None,
+            album: None,
+            genre: None,
+            date: None,
+            comment: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MetadataField {
+    Title,
+    Artist,
+    Album,
+    Genre,
+    Date,
+    Comment,
+}
+
+impl MetadataField {
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Artist => "artist",
+            Self::Album => "album",
+            Self::Genre => "genre",
+            Self::Date => "date",
+            Self::Comment => "comment",
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Title => "Title",
+            Self::Artist => "Artist",
+            Self::Album => "Album",
+            Self::Genre => "Genre",
+            Self::Date => "Date / Year",
+            Self::Comment => "Comment",
+        }
+    }
+
+    #[must_use]
+    pub const fn visible_for_image(self) -> bool {
+        !matches!(self, Self::Album | Self::Genre)
+    }
+}
+
+pub const METADATA_MODES: [MetadataMode; 3] = [
+    MetadataMode::Preserve,
+    MetadataMode::Clean,
+    MetadataMode::Replace,
+];
+
+pub const METADATA_FIELDS: [MetadataField; 6] = [
+    MetadataField::Title,
+    MetadataField::Artist,
+    MetadataField::Album,
+    MetadataField::Genre,
+    MetadataField::Date,
+    MetadataField::Comment,
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MetadataModeOption {
+    pub mode: MetadataMode,
+    pub label: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataFieldOption {
+    pub field: MetadataField,
+    pub id: &'static str,
+    pub label: &'static str,
+    pub value: String,
+    pub placeholder: String,
+    pub is_disabled: bool,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversionConfig {
     pub processing_mode: ProcessingMode,
     pub container: String,
+    pub video_codec: String,
+    pub video_bitrate_mode: String,
+    pub video_bitrate: String,
     pub audio_codec: String,
     pub audio_bitrate: String,
     pub audio_bitrate_mode: String,
@@ -110,12 +277,30 @@ pub struct ConversionConfig {
     pub audio_normalize: bool,
     pub start_time: Option<String>,
     pub end_time: Option<String>,
+    pub metadata: MetadataConfig,
     pub rotation: String,
     pub flip_horizontal: bool,
     pub flip_vertical: bool,
     pub crop: Option<CropSettings>,
     pub selected_audio_tracks: Vec<u32>,
     pub selected_subtitle_tracks: Vec<u32>,
+    pub resolution: String,
+    pub custom_width: Option<String>,
+    pub custom_height: Option<String>,
+    pub scaling_algorithm: String,
+    pub fps: String,
+    pub crf: u8,
+    pub quality: u32,
+    pub preset: String,
+    pub ml_upscale: String,
+    pub pixel_format: String,
+    pub gif_colors: u16,
+    pub gif_dither: String,
+    pub gif_loop: u16,
+    pub nvenc_spatial_aq: bool,
+    pub nvenc_temporal_aq: bool,
+    pub videotoolbox_allow_sw: bool,
+    pub hw_decode: bool,
 }
 
 impl Default for ConversionConfig {
@@ -123,6 +308,9 @@ impl Default for ConversionConfig {
         Self {
             processing_mode: ProcessingMode::Reencode,
             container: "mp4".to_string(),
+            video_codec: DEFAULT_VIDEO_CODEC.to_string(),
+            video_bitrate_mode: DEFAULT_VIDEO_BITRATE_MODE.to_string(),
+            video_bitrate: DEFAULT_VIDEO_BITRATE.to_string(),
             audio_codec: media_rules::default_audio_codec_for_container("mp4").to_string(),
             audio_bitrate: DEFAULT_AUDIO_BITRATE.to_string(),
             audio_bitrate_mode: DEFAULT_AUDIO_BITRATE_MODE.to_string(),
@@ -132,12 +320,30 @@ impl Default for ConversionConfig {
             audio_normalize: false,
             start_time: None,
             end_time: None,
+            metadata: MetadataConfig::default(),
             rotation: "0".to_string(),
             flip_horizontal: false,
             flip_vertical: false,
             crop: None,
             selected_audio_tracks: Vec::new(),
             selected_subtitle_tracks: Vec::new(),
+            resolution: DEFAULT_RESOLUTION.to_string(),
+            custom_width: None,
+            custom_height: None,
+            scaling_algorithm: DEFAULT_SCALING_ALGORITHM.to_string(),
+            fps: DEFAULT_FPS.to_string(),
+            crf: DEFAULT_CRF,
+            quality: DEFAULT_QUALITY,
+            preset: DEFAULT_PRESET.to_string(),
+            ml_upscale: "none".to_string(),
+            pixel_format: DEFAULT_PIXEL_FORMAT.to_string(),
+            gif_colors: DEFAULT_GIF_COLORS,
+            gif_dither: DEFAULT_GIF_DITHER.to_string(),
+            gif_loop: DEFAULT_GIF_LOOP,
+            nvenc_spatial_aq: false,
+            nvenc_temporal_aq: false,
+            videotoolbox_allow_sw: false,
+            hw_decode: false,
         }
     }
 }
@@ -184,6 +390,33 @@ pub struct AudioCodecOption {
 pub struct AudioChannelOption {
     pub id: &'static str,
     pub label: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VideoCodecOption {
+    pub codec: &'static str,
+    pub label: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+    pub disabled_reason: Option<&'static str>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VideoPixelFormatOption {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub is_selected: bool,
+    pub is_disabled: bool,
+    pub caption: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VideoPresetOption {
+    pub preset: &'static str,
+    pub label: &'static str,
+    pub caption: &'static str,
     pub is_selected: bool,
     pub is_disabled: bool,
 }
@@ -263,6 +496,32 @@ pub struct AudioTrack {
 pub struct SubtitleTrack {
     pub index: u32,
     pub codec: String,
+    pub language: Option<String>,
+    pub label: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SourceTags {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub date: Option<String>,
+    pub comment: Option<String>,
+}
+
+impl SourceTags {
+    #[must_use]
+    pub fn value(&self, field: MetadataField) -> Option<&str> {
+        match field {
+            MetadataField::Title => self.title.as_deref(),
+            MetadataField::Artist => self.artist.as_deref(),
+            MetadataField::Album => self.album.as_deref(),
+            MetadataField::Genre => self.genre.as_deref(),
+            MetadataField::Date => self.date.as_deref(),
+            MetadataField::Comment => self.comment.as_deref(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -279,6 +538,7 @@ pub struct SourceMetadata {
     pub video_bitrate_kbps: Option<f64>,
     pub audio_tracks: Vec<AudioTrack>,
     pub subtitle_tracks: Vec<SubtitleTrack>,
+    pub tags: Option<SourceTags>,
     pub pixel_format: Option<String>,
     pub color_space: Option<String>,
     pub color_range: Option<String>,
@@ -324,6 +584,18 @@ pub(super) const AUDIO_CODEC_DEFINITIONS: [AudioCodecDefinition; 7] = [
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct OptionalAudioCodecDefinition {
+    pub(super) codec: &'static str,
+    pub(super) label: &'static str,
+}
+
+pub(super) const OPTIONAL_AUDIO_CODEC_DEFINITIONS: [OptionalAudioCodecDefinition; 1] =
+    [OptionalAudioCodecDefinition {
+        codec: "libfdk_aac",
+        label: "AAC (Fraunhofer FDK)",
+    }];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct AudioChannelDefinition {
     pub(super) id: &'static str,
     pub(super) label: &'static str,
@@ -343,6 +615,137 @@ pub(super) const AUDIO_CHANNEL_DEFINITIONS: [AudioChannelDefinition; 3] = [
         label: "Mono",
     },
 ];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct VideoCodecDefinition {
+    pub(super) codec: &'static str,
+    pub(super) label: &'static str,
+    pub(super) capability: Option<VideoCodecCapability>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum VideoCodecCapability {
+    H264Videotoolbox,
+    H264Nvenc,
+    HevcVideotoolbox,
+    HevcNvenc,
+    Av1Nvenc,
+}
+
+pub(super) const VIDEO_CODEC_DEFINITIONS: [VideoCodecDefinition; 11] = [
+    VideoCodecDefinition {
+        codec: "libx264",
+        label: "H.264 / AVC",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "libx265",
+        label: "H.265 / HEVC",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "vp9",
+        label: "VP9 / Web",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "prores",
+        label: "Apple ProRes",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "libsvtav1",
+        label: "AV1 / SVT",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "gif",
+        label: "GIF / Palette",
+        capability: None,
+    },
+    VideoCodecDefinition {
+        codec: "h264_videotoolbox",
+        label: "H.264 (Apple Silicon)",
+        capability: Some(VideoCodecCapability::H264Videotoolbox),
+    },
+    VideoCodecDefinition {
+        codec: "h264_nvenc",
+        label: "H.264 (NVIDIA)",
+        capability: Some(VideoCodecCapability::H264Nvenc),
+    },
+    VideoCodecDefinition {
+        codec: "hevc_videotoolbox",
+        label: "H.265 (Apple Silicon)",
+        capability: Some(VideoCodecCapability::HevcVideotoolbox),
+    },
+    VideoCodecDefinition {
+        codec: "hevc_nvenc",
+        label: "H.265 (NVIDIA)",
+        capability: Some(VideoCodecCapability::HevcNvenc),
+    },
+    VideoCodecDefinition {
+        codec: "av1_nvenc",
+        label: "AV1 (NVIDIA)",
+        capability: Some(VideoCodecCapability::Av1Nvenc),
+    },
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct VideoPixelFormatDefinition {
+    pub(super) id: &'static str,
+    pub(super) label: &'static str,
+}
+
+pub(super) const VIDEO_PIXEL_FORMAT_DEFINITIONS: [VideoPixelFormatDefinition; 7] = [
+    VideoPixelFormatDefinition {
+        id: "auto",
+        label: "Auto",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv420p",
+        label: "YUV 4:2:0 (8-bit)",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv422p",
+        label: "YUV 4:2:2 (8-bit)",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv444p",
+        label: "YUV 4:4:4 (8-bit)",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv420p10le",
+        label: "YUV 4:2:0 (10-bit)",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv422p10le",
+        label: "YUV 4:2:2 (10-bit)",
+    },
+    VideoPixelFormatDefinition {
+        id: "yuv444p10le",
+        label: "YUV 4:4:4 (10-bit)",
+    },
+];
+
+pub(super) const VIDEO_PRESETS: [&str; 9] = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+];
+
+pub(super) const RESOLUTION_OPTIONS: [&str; 5] = ["original", "1080p", "720p", "480p", "custom"];
+pub(super) const SCALING_ALGORITHM_OPTIONS: [&str; 4] =
+    ["bicubic", "lanczos", "bilinear", "nearest"];
+pub(super) const FPS_OPTIONS: [&str; 4] = ["original", "24", "30", "60"];
+pub(super) const GIF_FPS_OPTIONS: [&str; 8] = ["original", "8", "10", "12", "15", "20", "24", "30"];
+pub(super) const GIF_COLOR_OPTIONS: [u16; 4] = [32, 64, 128, 256];
+pub(super) const GIF_DITHER_OPTIONS: [&str; 4] = ["sierra2_4a", "floyd_steinberg", "bayer", "none"];
 
 impl SourceMetadata {
     #[must_use]

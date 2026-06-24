@@ -120,25 +120,47 @@ pub(in crate::app) fn settings_tab_content(
             window,
             cx,
         )),
-        SettingsTab::Video => {
-            content.child(settings_section("VIDEO").child(settings_value_row("STATUS", "Ready")))
-        }
-        SettingsTab::Images => {
-            content.child(settings_section("IMAGES").child(settings_value_row("STATUS", "Ready")))
-        }
+        SettingsTab::Video => content.child(settings_video_tab(
+            settings.config,
+            settings.settings_disabled,
+            settings.available_encoders,
+            SettingsVideoInputFocuses {
+                width: settings.video_width_focus,
+                height: settings.video_height_focus,
+                bitrate: settings.video_bitrate_focus,
+                gif_loop: settings.gif_loop_focus,
+            },
+            window,
+            cx,
+        )),
+        SettingsTab::Images => content.child(settings_images_tab(
+            settings.config,
+            settings.settings_disabled,
+            settings.available_encoders,
+            settings.video_width_focus,
+            settings.video_height_focus,
+            window,
+            cx,
+        )),
         SettingsTab::Audio => content.child(settings_audio_tab(
             settings.config,
             settings.metadata,
             settings.settings_disabled,
+            settings.available_encoders,
             settings.audio_bitrate_focus,
             window,
             cx,
         )),
         SettingsTab::Subtitles => content
             .child(settings_section("SUBTITLES").child(settings_value_row("STATUS", "Ready"))),
-        SettingsTab::Metadata => {
-            content.child(settings_section("METADATA").child(settings_value_row("STATUS", "Ready")))
-        }
+        SettingsTab::Metadata => content.child(settings_metadata_tab(
+            settings.config,
+            settings.metadata,
+            settings.settings_disabled,
+            settings.metadata_focuses,
+            window,
+            cx,
+        )),
         SettingsTab::Presets => {
             content.child(settings_section("PRESETS").child(settings_value_row("STATUS", "Ready")))
         }

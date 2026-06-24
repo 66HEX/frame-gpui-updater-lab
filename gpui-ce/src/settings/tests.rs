@@ -105,6 +105,7 @@ mod output_options {
             subtitle_tracks: vec![SubtitleTrack {
                 index: 2,
                 codec: "subrip".to_string(),
+                ..SubtitleTrack::default()
             }],
             ..SourceMetadata::default()
         }
@@ -299,8 +300,135 @@ mod audio_track_options {
     }
 }
 
+mod metadata_options {
+    use super::*;
+
+    fn tagged_metadata() -> SourceMetadata {
+        SourceMetadata {
+            tags: Some(SourceTags {
+                title: Some("Original Title".to_string()),
+                artist: Some("Original Artist".to_string()),
+                album: Some("Original Album".to_string()),
+                genre: Some("Documentary".to_string()),
+                date: Some("2026".to_string()),
+                comment: Some("Camera note".to_string()),
+            }),
+            ..SourceMetadata::default()
+        }
+    }
+
+    #[test]
+    fn default_metadata_mode_matches_original_preserve_mode() {
+        let config = ConversionConfig::default();
+
+        assert_eq!(config.metadata.mode, MetadataMode::Preserve);
+    }
+
+    #[test]
+    fn metadata_mode_options_mark_current_mode_selected() {
+        let config = ConversionConfig {
+            metadata: MetadataConfig {
+                mode: MetadataMode::Clean,
+                ..MetadataConfig::default()
+            },
+            ..ConversionConfig::default()
+        };
+
+        let options = metadata_mode_options(&config, false);
+
+        assert!(options[1].is_selected);
+        assert_eq!(options[1].label, "Clean");
+    }
+
+    #[test]
+    fn metadata_field_options_use_source_tags_as_preserve_placeholders() {
+        let options = metadata_field_options(
+            &ConversionConfig::default(),
+            Some(&tagged_metadata()),
+            false,
+        );
+
+        assert_eq!(options[0].placeholder, "Original Title");
+        assert_eq!(options[1].placeholder, "Original Artist");
+    }
+
+    #[test]
+    fn metadata_field_options_hide_album_and_genre_for_images() {
+        let metadata = SourceMetadata {
+            media_kind: Some(SourceKind::Image),
+            ..tagged_metadata()
+        };
+
+        let fields = metadata_field_options(&ConversionConfig::default(), Some(&metadata), false)
+            .into_iter()
+            .map(|option| option.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(fields, ["title", "artist", "date", "comment"]);
+    }
+
+    #[test]
+    fn metadata_field_options_use_blank_placeholder_outside_preserve_mode() {
+        let config = ConversionConfig {
+            metadata: MetadataConfig {
+                mode: MetadataMode::Replace,
+                ..MetadataConfig::default()
+            },
+            ..ConversionConfig::default()
+        };
+
+        let options = metadata_field_options(&config, Some(&tagged_metadata()), false);
+
+        assert_eq!(options[0].placeholder, "");
+    }
+
+    #[test]
+    fn apply_metadata_mode_updates_selected_mode() {
+        let mut config = ConversionConfig::default();
+
+        assert!(apply_metadata_mode(&mut config, MetadataMode::Replace));
+
+        assert_eq!(config.metadata.mode, MetadataMode::Replace);
+    }
+
+    #[test]
+    fn apply_metadata_field_stores_text_value() {
+        let mut config = ConversionConfig::default();
+
+        assert!(apply_metadata_field(
+            &mut config,
+            MetadataField::Title,
+            "Render Title",
+        ));
+
+        assert_eq!(config.metadata.title.as_deref(), Some("Render Title"));
+    }
+
+    #[test]
+    fn normalize_output_config_clears_image_only_hidden_metadata_fields() {
+        let mut config = ConversionConfig {
+            metadata: MetadataConfig {
+                album: Some("Album".to_string()),
+                genre: Some("Genre".to_string()),
+                ..MetadataConfig::default()
+            },
+            ..ConversionConfig::default()
+        };
+        let metadata = SourceMetadata {
+            media_kind: Some(SourceKind::Image),
+            ..SourceMetadata::default()
+        };
+
+        assert!(normalize_output_config(&mut config, Some(&metadata)));
+
+        assert_eq!(config.metadata.album, None);
+        assert_eq!(config.metadata.genre, None);
+    }
+}
+
 mod audio_codec_options {
     use super::*;
+    use frame_core::capabilities::AvailableEncoders;
 
     fn codec_option<'a>(options: &'a [AudioCodecOption], codec: &str) -> &'a AudioCodecOption {
         options
@@ -309,16 +437,23 @@ mod audio_codec_options {
             .unwrap_or_else(|| panic!("{codec} codec option should exist"))
     }
 
+    fn encoders() -> AvailableEncoders {
+        AvailableEncoders {
+            libfdk_aac: true,
+            ..AvailableEncoders::default()
+        }
+    }
+
     #[test]
     fn marks_default_aac_selected_for_mp4() {
-        let options = audio_codec_options(&ConversionConfig::default(), false);
+        let options = audio_codec_options(&ConversionConfig::default(), &encoders(), false);
 
         assert!(codec_option(&options, "aac").is_selected);
     }
 
     #[test]
     fn marks_flac_incompatible_for_mp4() {
-        let options = audio_codec_options(&ConversionConfig::default(), false);
+        let options = audio_codec_options(&ConversionConfig::default(), &encoders(), false);
 
         assert_eq!(
             codec_option(&options, "flac").disabled_reason,
@@ -333,7 +468,7 @@ mod audio_codec_options {
             ..ConversionConfig::default()
         };
 
-        let options = audio_codec_options(&config, false);
+        let options = audio_codec_options(&config, &encoders(), false);
 
         assert!(!codec_option(&options, "flac").is_disabled);
     }
@@ -345,9 +480,20 @@ mod audio_codec_options {
             ..ConversionConfig::default()
         };
 
-        let options = audio_codec_options(&config, false);
+        let options = audio_codec_options(&config, &encoders(), false);
 
         assert!(options.iter().all(|option| option.is_disabled));
+    }
+
+    #[test]
+    fn hides_libfdk_aac_when_encoder_is_unavailable() {
+        let options = audio_codec_options(
+            &ConversionConfig::default(),
+            &AvailableEncoders::default(),
+            false,
+        );
+
+        assert!(options.iter().all(|option| option.codec != "libfdk_aac"));
     }
 
     #[test]
@@ -489,6 +635,135 @@ mod audio_encoding_options {
         assert!(apply_audio_volume(&mut config, 250));
 
         assert_eq!(config.audio_volume, 200);
+    }
+}
+
+mod video_options {
+    use super::*;
+    use frame_core::capabilities::AvailableEncoders;
+
+    fn codec_option<'a>(
+        options: &'a [VideoCodecOption],
+        codec: &str,
+    ) -> Option<&'a VideoCodecOption> {
+        options.iter().find(|option| option.codec == codec)
+    }
+
+    #[test]
+    fn default_config_matches_original_video_defaults() {
+        let config = ConversionConfig::default();
+
+        assert_eq!(config.video_codec, "libx264");
+        assert_eq!(config.video_bitrate_mode, "crf");
+        assert_eq!(config.video_bitrate, "5000");
+        assert_eq!(config.resolution, "original");
+        assert_eq!(config.scaling_algorithm, "bicubic");
+        assert_eq!(config.fps, "original");
+        assert_eq!(config.crf, 23);
+        assert_eq!(config.quality, 50);
+        assert_eq!(config.preset, "medium");
+        assert_eq!(config.pixel_format, "auto");
+        assert_eq!(config.gif_colors, 256);
+        assert_eq!(config.gif_dither, "sierra2_4a");
+        assert_eq!(config.gif_loop, 0);
+    }
+
+    #[test]
+    fn video_codec_options_hide_unavailable_hardware_encoders() {
+        let options = video_codec_options(
+            &ConversionConfig::default(),
+            &AvailableEncoders::default(),
+            false,
+        );
+
+        assert!(codec_option(&options, "h264_videotoolbox").is_none());
+        assert!(codec_option(&options, "h264_nvenc").is_none());
+    }
+
+    #[test]
+    fn video_codec_options_show_available_hardware_encoders() {
+        let encoders = AvailableEncoders {
+            h264_videotoolbox: true,
+            ..AvailableEncoders::default()
+        };
+
+        let options = video_codec_options(&ConversionConfig::default(), &encoders, false);
+
+        assert!(codec_option(&options, "h264_videotoolbox").is_some());
+    }
+
+    #[test]
+    fn apply_video_codec_rejects_container_incompatible_codec() {
+        let mut config = ConversionConfig {
+            container: "webm".to_string(),
+            ..ConversionConfig::default()
+        };
+
+        assert!(!apply_video_codec(&mut config, "libx264"));
+
+        assert_eq!(config.video_codec, "libx264");
+    }
+
+    #[test]
+    fn apply_pixel_format_rejects_incompatible_encoder_format_pair() {
+        let mut config = ConversionConfig {
+            container: "mp4".to_string(),
+            video_codec: "vp9".to_string(),
+            ..ConversionConfig::default()
+        };
+
+        assert!(!apply_pixel_format(&mut config, "yuv420p10le"));
+
+        assert_eq!(config.pixel_format, "auto");
+    }
+
+    #[test]
+    fn normalize_video_config_for_gif_forces_original_gif_contract() {
+        let mut config = ConversionConfig {
+            container: "gif".to_string(),
+            video_codec: "libx264".to_string(),
+            pixel_format: "yuv420p".to_string(),
+            ml_upscale: "esrgan-2x".to_string(),
+            hw_decode: true,
+            ..ConversionConfig::default()
+        };
+
+        assert!(normalize_video_config(&mut config, None, true));
+
+        assert_eq!(config.video_codec, "gif");
+        assert_eq!(config.pixel_format, "auto");
+        assert_eq!(config.ml_upscale, "none");
+        assert!(!config.hw_decode);
+    }
+
+    #[test]
+    fn normalize_video_config_resets_visual_filters_in_copy_mode() {
+        let mut config = ConversionConfig {
+            processing_mode: ProcessingMode::Copy,
+            resolution: "720p".to_string(),
+            fps: "30".to_string(),
+            pixel_format: "yuv420p".to_string(),
+            ml_upscale: "esrgan-2x".to_string(),
+            flip_horizontal: true,
+            ..ConversionConfig::default()
+        };
+
+        assert!(normalize_video_config(&mut config, None, true));
+
+        assert_eq!(config.resolution, "original");
+        assert_eq!(config.fps, "original");
+        assert_eq!(config.pixel_format, "auto");
+        assert_eq!(config.ml_upscale, "none");
+        assert!(!config.flip_horizontal);
+    }
+
+    #[test]
+    fn apply_gif_loop_strips_non_digits_and_clamps_to_ffmpeg_range() {
+        let mut config = ConversionConfig::default();
+
+        assert!(apply_gif_loop(&mut config, "999999x"));
+
+        assert_eq!(config.gif_loop, 65_535);
     }
 }
 

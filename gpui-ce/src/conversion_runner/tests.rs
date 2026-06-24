@@ -1,5 +1,5 @@
 use super::*;
-use crate::settings::{CropSettings, ProcessingMode};
+use crate::settings::{CropSettings, MetadataConfig, MetadataMode, ProcessingMode};
 
 #[test]
 fn core_config_from_gpui_preserves_active_conversion_fields() {
@@ -15,6 +15,12 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
         audio_normalize: true,
         start_time: Some("00:00:05.000".to_string()),
         end_time: Some("00:00:15.000".to_string()),
+        metadata: MetadataConfig {
+            mode: MetadataMode::Replace,
+            title: Some("Render Title".to_string()),
+            artist: Some("Frame".to_string()),
+            ..MetadataConfig::default()
+        },
         rotation: "90".to_string(),
         flip_horizontal: true,
         flip_vertical: true,
@@ -30,6 +36,26 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
         }),
         selected_audio_tracks: vec![1, 2],
         selected_subtitle_tracks: vec![3],
+        video_codec: "libx265".to_string(),
+        video_bitrate_mode: "bitrate".to_string(),
+        video_bitrate: "9000".to_string(),
+        resolution: "custom".to_string(),
+        custom_width: Some("1920".to_string()),
+        custom_height: Some("1080".to_string()),
+        scaling_algorithm: "lanczos".to_string(),
+        fps: "30".to_string(),
+        crf: 18,
+        quality: 60,
+        preset: "slow".to_string(),
+        ml_upscale: "esrgan-2x".to_string(),
+        pixel_format: "yuv420p10le".to_string(),
+        gif_colors: 128,
+        gif_dither: "floyd_steinberg".to_string(),
+        gif_loop: 3,
+        nvenc_spatial_aq: false,
+        nvenc_temporal_aq: false,
+        videotoolbox_allow_sw: false,
+        hw_decode: false,
     };
 
     let core = core_config_from_gpui(&config);
@@ -40,6 +66,22 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
     assert_eq!(core.audio_channels, "stereo");
     assert_eq!(core.audio_volume, 125.0);
     assert!(core.audio_normalize);
+    assert_eq!(core.video_codec, "libx265");
+    assert_eq!(core.video_bitrate_mode, "bitrate");
+    assert_eq!(core.video_bitrate, "9000");
+    assert_eq!(core.resolution, "custom");
+    assert_eq!(core.custom_width.as_deref(), Some("1920"));
+    assert_eq!(core.custom_height.as_deref(), Some("1080"));
+    assert_eq!(core.scaling_algorithm, "lanczos");
+    assert_eq!(core.fps, "30");
+    assert_eq!(core.crf, 18);
+    assert_eq!(core.quality, 60);
+    assert_eq!(core.preset, "slow");
+    assert_eq!(core.ml_upscale.as_deref(), Some("esrgan-2x"));
+    assert_eq!(core.pixel_format, "yuv420p10le");
+    assert_eq!(core.gif_colors, 128);
+    assert_eq!(core.gif_dither, "floyd_steinberg");
+    assert_eq!(core.gif_loop, 3);
     assert_eq!(core.start_time.as_deref(), Some("00:00:05.000"));
     assert_eq!(core.end_time.as_deref(), Some("00:00:15.000"));
     assert_eq!(core.rotation, "90");
@@ -48,6 +90,9 @@ fn core_config_from_gpui_preserves_active_conversion_fields() {
     assert_eq!(core.selected_audio_tracks, [1, 2]);
     assert_eq!(core.selected_subtitle_tracks, [3]);
     assert_eq!(core.crop.as_ref().map(|crop| crop.width), Some(300.0));
+    assert_eq!(core.metadata.mode, frame_core::types::MetadataMode::Replace);
+    assert_eq!(core.metadata.title.as_deref(), Some("Render Title"));
+    assert_eq!(core.metadata.artist.as_deref(), Some("Frame"));
 }
 
 #[test]

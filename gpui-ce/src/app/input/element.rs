@@ -203,7 +203,7 @@ impl Element for FrameTextInputElement {
 pub(in crate::app) struct FrameTextInputSpec<'a> {
     pub(in crate::app) id: &'static str,
     pub(in crate::app) value: &'a str,
-    pub(in crate::app) placeholder: &'static str,
+    pub(in crate::app) placeholder: &'a str,
     pub(in crate::app) disabled: bool,
     pub(in crate::app) focus: Option<&'a FocusHandle>,
     pub(in crate::app) kind: FrameTextInputKind,
