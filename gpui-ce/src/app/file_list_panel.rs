@@ -1,5 +1,5 @@
-use super::primitives::*;
 use super::*;
+use super::{components::*, primitives::*};
 
 pub(super) fn file_list_panel(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> gpui::Div {
     div()
@@ -40,10 +40,11 @@ pub(super) fn file_list_header(
                 .text_color(color(theme::FRAME_GRAY_600))
                 .child(
                     div().col_span(1).flex().items_center().child(
-                        checkbox_hit_area(
+                        frame_checkbox_hit_area(
                             selection.is_checked,
                             selection.is_indeterminate,
                             selection.is_enabled,
+                            FILE_ROW_HEIGHT,
                         )
                         .id("file-list-header-checkbox")
                         .when(selection.is_enabled, |this| this.cursor_pointer())
@@ -304,78 +305,26 @@ pub(super) fn row_action_button(
     enabled: bool,
     tone: RowActionTone,
 ) -> gpui::Stateful<gpui::Div> {
-    let (background, hover_background, active_background, foreground, hover_foreground, opacity) =
-        match (tone, enabled) {
-            (RowActionTone::Normal, true) => (
-                theme::TRANSPARENT,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_GRAY_600,
-                theme::FOREGROUND,
-                1.0,
-            ),
-            (RowActionTone::Normal, false) => (
-                theme::TRANSPARENT,
-                theme::TRANSPARENT,
-                theme::TRANSPARENT,
-                theme::FRAME_GRAY_600,
-                theme::FRAME_GRAY_600,
-                0.5,
-            ),
-            (RowActionTone::Destructive, true) => (
-                theme::TRANSPARENT,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_RED,
-                theme::FRAME_RED,
-                1.0,
-            ),
-            (RowActionTone::Destructive, false) => (
-                theme::FRAME_GRAY_100,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_GRAY_100,
-                theme::FRAME_RED.with_alpha(0.5),
-                theme::FRAME_RED.with_alpha(0.5),
-                1.0,
-            ),
-        };
+    let variant = match tone {
+        RowActionTone::Normal => FrameIconButtonVariant::Ghost,
+        RowActionTone::Destructive => FrameIconButtonVariant::DestructiveGhost,
+    };
 
-    div()
-        .id(id)
-        .w(px(FILE_LIST_ACTION_BUTTON_SIZE))
-        .h(px(FILE_LIST_ACTION_BUTTON_SIZE))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(theme::RADIUS_SM))
-        .bg(color(background))
-        .text_color(color(foreground))
-        .opacity(opacity)
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(hover_background))
-                    .text_color(color(hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(active_background)))
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .child(icon_svg(
-            icon,
-            FILE_LIST_ACTION_ICON_SIZE,
-            color(foreground),
-        ))
+    frame_icon_button(
+        id,
+        icon,
+        variant,
+        enabled,
+        FILE_LIST_ACTION_BUTTON_SIZE,
+        FILE_LIST_ACTION_ICON_SIZE,
+    )
 }
 pub(super) fn row_checkbox_control(
     file_id: String,
     is_checked: bool,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
-    checkbox_hit_area(is_checked, false, true)
+    frame_checkbox_hit_area(is_checked, false, true, FILE_ROW_HEIGHT)
         .id(element_id("file-row-checkbox", &file_id))
         .cursor_pointer()
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
@@ -387,64 +336,6 @@ pub(super) fn row_checkbox_control(
                 cx.notify();
             }
         }))
-}
-
-pub(super) fn checkbox_hit_area(
-    is_checked: bool,
-    is_indeterminate: bool,
-    is_enabled: bool,
-) -> gpui::Div {
-    div()
-        .w(px(theme::MIN_HIT_AREA))
-        .h(px(FILE_ROW_HEIGHT))
-        .flex()
-        .items_center()
-        .justify_start()
-        .child(checkbox_indicator(is_checked, is_indeterminate, is_enabled))
-}
-
-pub(super) fn checkbox_indicator(
-    is_checked: bool,
-    is_indeterminate: bool,
-    is_enabled: bool,
-) -> gpui::Div {
-    let is_active = is_checked || is_indeterminate;
-    let mut indicator = div()
-        .w(px(FILE_LIST_CHECKBOX_SIZE))
-        .h(px(FILE_LIST_CHECKBOX_SIZE))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(theme::RADIUS_XS))
-        .border_1()
-        .border_color(if is_active || is_enabled {
-            color(theme::FRAME_GRAY_600)
-        } else {
-            color(theme::FRAME_GRAY_200)
-        })
-        .bg(if is_active {
-            color(theme::FRAME_GRAY_600)
-        } else {
-            color(theme::TRANSPARENT)
-        });
-
-    if is_indeterminate {
-        indicator = indicator.child(
-            div()
-                .w(px(6.0))
-                .h(px(2.0))
-                .rounded(px(theme::RADIUS_XS))
-                .bg(color(theme::FOREGROUND)),
-        );
-    } else if is_checked {
-        indicator = indicator.child(icon_svg(
-            assets::ICON_CHECK,
-            FILE_LIST_CHECK_ICON_SIZE,
-            color(theme::FOREGROUND),
-        ));
-    }
-
-    indicator
 }
 
 pub(super) fn state_tone_color(tone: FileStateTone) -> Rgba {

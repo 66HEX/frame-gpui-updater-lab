@@ -161,7 +161,7 @@ pub(in crate::app) fn settings_resolution_grid(
         let selected = effective_resolution == *resolution;
         let label = resolution_label(resolution);
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-resolution-{resolution}"),
                 label,
                 selected,
@@ -243,7 +243,7 @@ pub(in crate::app) fn settings_video_scaling_section(
     let mut grid = div().grid().grid_cols(2).gap_2();
     for algorithm in scaling_algorithm_options() {
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-scaling-{algorithm}"),
                 scaling_algorithm_label(algorithm),
                 config.scaling_algorithm == *algorithm,
@@ -280,7 +280,7 @@ pub(in crate::app) fn settings_video_ml_section(
         let enabled = !settings_disabled && (mode == "none" || available_encoders.ml_upscale);
         let ml_upscale_available = available_encoders.ml_upscale;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-ml-upscale-{mode}"),
                 label,
                 config.ml_upscale == mode,
@@ -312,7 +312,7 @@ pub(in crate::app) fn settings_video_fps_section(
     let mut grid = div().grid().grid_cols(2).gap_2();
     for fps in fps_options(is_gif) {
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-fps-{fps}"),
                 fps_label(fps),
                 config.fps == *fps,
@@ -341,7 +341,7 @@ pub(in crate::app) fn settings_video_gif_colors_section(
     let mut grid = div().grid().grid_cols(2).gap_2();
     for colors in gif_color_options() {
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-gif-colors-{colors}"),
                 colors.to_string(),
                 config.gif_colors == *colors,
@@ -371,7 +371,7 @@ pub(in crate::app) fn settings_video_gif_dither_section(
     for dither in gif_dither_options() {
         let dither = *dither;
         list = list.child(
-            settings_video_list_item(
+            frame_list_item_with_caption(
                 format!("video-gif-dither-{dither}"),
                 gif_dither_label(dither),
                 dither.to_string(),
@@ -427,7 +427,7 @@ fn settings_video_encoder_section(
         let codec = option.codec;
         let enabled = !option.is_disabled;
         list = list.child(
-            settings_video_list_item(
+            frame_list_item_with_caption(
                 format!("video-codec-{codec}"),
                 codec.to_uppercase(),
                 option.disabled_reason.unwrap_or(option.label).to_string(),
@@ -459,7 +459,7 @@ fn settings_video_pixel_format_section(
         let pixel_format = option.id;
         let enabled = !settings_disabled && !option.is_disabled;
         list = list.child(
-            settings_video_list_item(
+            frame_list_item_with_caption(
                 format!("video-pixel-format-{pixel_format}"),
                 option.label,
                 option.caption,
@@ -491,7 +491,7 @@ fn settings_video_preset_section(
         let preset = option.preset;
         let enabled = !option.is_disabled;
         list = list.child(
-            settings_video_list_item(
+            frame_list_item_with_caption(
                 format!("video-preset-{preset}"),
                 option.label,
                 option.caption,
@@ -598,7 +598,7 @@ fn settings_video_bitrate_mode_grid(
     let mut grid = div().grid().grid_cols(2).gap_2();
     for (mode, label) in [("crf", "Constant Quality"), ("bitrate", "Target Bitrate")] {
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("video-bitrate-mode-{mode}"),
                 label,
                 config.video_bitrate_mode == mode,
@@ -672,53 +672,29 @@ fn settings_video_range_slider(
     let fraction = range_fraction(value, min, max);
     let drag = SettingsVideoRangeDrag { target, min, max };
 
-    div()
-        .id(match target {
+    frame_slider(
+        match target {
             SettingsVideoRangeTarget::Crf => "settings-video-crf-slider",
             SettingsVideoRangeTarget::Quality => "settings-video-quality-slider",
-        })
-        .relative()
-        .h(px(20.0))
-        .w_full()
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .when(!disabled, |this| this.cursor_pointer())
-        .on_drag_move(cx.listener(
-            |root, event: &DragMoveEvent<SettingsVideoRangeDrag>, _window, cx| {
-                let drag = *event.drag(cx);
-                let fraction =
-                    timeline_slider_percent_from_bounds(event.event.position, event.bounds);
-                let value = range_value_from_fraction(fraction, drag.min, drag.max);
-                let changed = root.update_selected_config(|config| match drag.target {
-                    SettingsVideoRangeTarget::Crf => apply_crf(config, value as u8),
-                    SettingsVideoRangeTarget::Quality => apply_quality(config, value),
-                });
-                if changed {
-                    cx.notify();
-                }
-            },
-        ))
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .top(px(8.0))
-                .h(px(4.0))
-                .rounded(px(2.0))
-                .bg(color(theme::FRAME_GRAY_100))
-                .shadow(input_highlight_shadows()),
-        )
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .top(px(8.0))
-                .h(px(4.0))
-                .w(relative(fraction))
-                .rounded(px(2.0))
-                .bg(color(theme::FOREGROUND)),
-        )
-        .child(settings_video_range_handle(fraction, drag, !disabled))
+        },
+        fraction,
+        disabled,
+    )
+    .on_drag_move(cx.listener(
+        |root, event: &DragMoveEvent<SettingsVideoRangeDrag>, _window, cx| {
+            let drag = *event.drag(cx);
+            let fraction = timeline_slider_percent_from_bounds(event.event.position, event.bounds);
+            let value = range_value_from_fraction(fraction, drag.min, drag.max);
+            let changed = root.update_selected_config(|config| match drag.target {
+                SettingsVideoRangeTarget::Crf => apply_crf(config, value as u8),
+                SettingsVideoRangeTarget::Quality => apply_quality(config, value),
+            });
+            if changed {
+                cx.notify();
+            }
+        },
+    ))
+    .child(settings_video_range_handle(fraction, drag, !disabled))
 }
 
 fn settings_video_range_handle(
@@ -726,21 +702,14 @@ fn settings_video_range_handle(
     drag: SettingsVideoRangeDrag,
     enabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    let handle = div()
-        .id(match drag.target {
+    let handle = frame_slider_handle(
+        match drag.target {
             SettingsVideoRangeTarget::Crf => "settings-video-crf-handle",
             SettingsVideoRangeTarget::Quality => "settings-video-quality-handle",
-        })
-        .absolute()
-        .left(relative(fraction))
-        .top(px(3.0))
-        .ml(px(-5.0))
-        .w(px(10.0))
-        .h(px(14.0))
-        .rounded(px(5.0))
-        .bg(color(theme::FOREGROUND))
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| this.cursor_ew_resize());
+        },
+        fraction,
+        enabled,
+    );
 
     if enabled {
         handle.on_drag(drag, |_drag, _position, _window, cx| {
@@ -865,7 +834,7 @@ fn settings_video_checkbox_row(
         .gap_2()
         .opacity(if disabled { 0.5 } else { 1.0 })
         .when(!disabled, |this| this.cursor_pointer())
-        .child(selection_checkbox(checked, disabled))
+        .child(frame_checkbox_indicator(checked, false, disabled))
         .child(
             div()
                 .flex()
@@ -873,79 +842,6 @@ fn settings_video_checkbox_row(
                 .gap_1()
                 .child(settings_field_label(label))
                 .child(settings_hint_text(hint)),
-        )
-}
-
-pub(in crate::app) fn selection_checkbox(checked: bool, disabled: bool) -> gpui::Div {
-    div()
-        .w(px(14.0))
-        .h(px(14.0))
-        .flex_shrink_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(3.0))
-        .bg(color(theme::BACKGROUND))
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .shadow(input_highlight_shadows())
-        .child(
-            div()
-                .w(px(8.0))
-                .h(px(8.0))
-                .rounded(px(2.0))
-                .bg(color(theme::FRAME_GRAY_600))
-                .opacity(if checked { 1.0 } else { 0.0 }),
-        )
-}
-
-fn settings_video_list_item(
-    id: impl Into<String>,
-    title: impl Into<String>,
-    caption: impl Into<String>,
-    selected: bool,
-    enabled: bool,
-) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Secondary, selected, enabled);
-
-    div()
-        .id(id.into())
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .child(
-            div()
-                .text_color(color(theme::FOREGROUND))
-                .child(title.into()),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_size(px(theme::TEXT_LABEL_SIZE))
-                .text_color(color(theme::FRAME_GRAY_600))
-                .child(caption.into()),
         )
 }
 

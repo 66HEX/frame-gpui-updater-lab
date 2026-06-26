@@ -61,7 +61,7 @@ pub(in crate::app) fn settings_audio_channels_grid(
         let channels = option.id;
         let is_enabled = !option.is_disabled;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("audio-channels-{channels}"),
                 option.label,
                 option.is_selected,
@@ -210,7 +210,7 @@ fn settings_audio_bitrate_mode_grid(
         let enabled =
             !disabled && (mode == "bitrate" || audio_codec_supports_vbr(&config.audio_codec));
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("audio-bitrate-mode-{mode}"),
                 label,
                 selected,
@@ -313,55 +313,31 @@ fn settings_audio_range_slider(
     let fraction = range_fraction(value, min, max);
     let drag = SettingsAudioRangeDrag { target, min, max };
 
-    div()
-        .id(match target {
+    frame_slider(
+        match target {
             SettingsAudioRangeTarget::Quality => "settings-audio-quality-slider",
             SettingsAudioRangeTarget::Volume => "settings-audio-volume-slider",
-        })
-        .relative()
-        .h(px(20.0))
-        .w_full()
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .when(!disabled, |this| this.cursor_pointer())
-        .on_drag_move(cx.listener(
-            |root, event: &DragMoveEvent<SettingsAudioRangeDrag>, _window, cx| {
-                let drag = *event.drag(cx);
-                let fraction =
-                    timeline_slider_percent_from_bounds(event.event.position, event.bounds);
-                let value = range_value_from_fraction(fraction, drag.min, drag.max);
-                let changed = root.update_selected_config(|config| match drag.target {
-                    SettingsAudioRangeTarget::Quality => {
-                        apply_audio_quality(config, &value.to_string())
-                    }
-                    SettingsAudioRangeTarget::Volume => apply_audio_volume(config, value),
-                });
-                if changed {
-                    cx.notify();
+        },
+        fraction,
+        disabled,
+    )
+    .on_drag_move(cx.listener(
+        |root, event: &DragMoveEvent<SettingsAudioRangeDrag>, _window, cx| {
+            let drag = *event.drag(cx);
+            let fraction = timeline_slider_percent_from_bounds(event.event.position, event.bounds);
+            let value = range_value_from_fraction(fraction, drag.min, drag.max);
+            let changed = root.update_selected_config(|config| match drag.target {
+                SettingsAudioRangeTarget::Quality => {
+                    apply_audio_quality(config, &value.to_string())
                 }
-            },
-        ))
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .top(px(8.0))
-                .h(px(4.0))
-                .rounded(px(2.0))
-                .bg(color(theme::FRAME_GRAY_100))
-                .shadow(input_highlight_shadows()),
-        )
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .top(px(8.0))
-                .h(px(4.0))
-                .w(relative(fraction))
-                .rounded(px(2.0))
-                .bg(color(theme::FOREGROUND)),
-        )
-        .child(settings_audio_range_handle(fraction, drag, !disabled))
+                SettingsAudioRangeTarget::Volume => apply_audio_volume(config, value),
+            });
+            if changed {
+                cx.notify();
+            }
+        },
+    ))
+    .child(settings_audio_range_handle(fraction, drag, !disabled))
 }
 
 fn settings_audio_range_handle(
@@ -369,21 +345,14 @@ fn settings_audio_range_handle(
     drag: SettingsAudioRangeDrag,
     enabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    let handle = div()
-        .id(match drag.target {
+    let handle = frame_slider_handle(
+        match drag.target {
             SettingsAudioRangeTarget::Quality => "settings-audio-quality-handle",
             SettingsAudioRangeTarget::Volume => "settings-audio-volume-handle",
-        })
-        .absolute()
-        .left(relative(fraction))
-        .top(px(3.0))
-        .ml(px(-5.0))
-        .w(px(10.0))
-        .h(px(14.0))
-        .rounded(px(5.0))
-        .bg(color(theme::FOREGROUND))
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| this.cursor_ew_resize());
+        },
+        fraction,
+        enabled,
+    );
 
     if enabled {
         handle.on_drag(drag, |_drag, _position, _window, cx| {
@@ -399,27 +368,6 @@ fn settings_audio_normalize_toggle(
     disabled: bool,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let checkbox = div()
-        .id("settings-audio-normalize")
-        .w(px(14.0))
-        .h(px(14.0))
-        .flex_shrink_0()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(3.0))
-        .bg(color(theme::BACKGROUND))
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .shadow(input_highlight_shadows())
-        .child(
-            div()
-                .w(px(8.0))
-                .h(px(8.0))
-                .rounded(px(2.0))
-                .bg(color(theme::FRAME_GRAY_600))
-                .opacity(if checked { 1.0 } else { 0.0 }),
-        );
-
     div()
         .id("settings-audio-normalize-row")
         .flex()
@@ -436,7 +384,7 @@ fn settings_audio_normalize_toggle(
                 cx.notify();
             }
         }))
-        .child(checkbox)
+        .child(frame_checkbox_indicator(checked, false, disabled))
         .child(
             div()
                 .flex()
@@ -465,64 +413,26 @@ pub(in crate::app) fn settings_audio_codec_button(
     option: crate::settings::AudioCodecOption,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(
-        ButtonVariant::Secondary,
-        option.is_selected,
-        !option.is_disabled,
-    );
     let codec = option.codec;
     let is_enabled = !option.is_disabled;
     let caption = option.disabled_reason.unwrap_or(option.label);
 
-    div()
-        .id(format!("audio-codec-{codec}"))
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(is_enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!is_enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(is_enabled, window, cx);
-        })
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if !is_enabled {
-                return;
-            }
-            if root.update_selected_config(|config| apply_audio_codec(config, codec)) {
-                cx.notify();
-            }
-        }))
-        .child(
-            div()
-                .text_color(color(theme::FOREGROUND))
-                .child(codec.to_uppercase()),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_size(px(theme::TEXT_LABEL_SIZE))
-                .text_color(color(theme::FRAME_GRAY_600))
-                .child(caption),
-        )
+    frame_list_item_with_caption(
+        format!("audio-codec-{codec}"),
+        codec.to_uppercase(),
+        caption,
+        option.is_selected,
+        is_enabled,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if !is_enabled {
+            return;
+        }
+        if root.update_selected_config(|config| apply_audio_codec(config, codec)) {
+            cx.notify();
+        }
+    }))
 }
 
 pub(in crate::app) fn settings_audio_track_button(
@@ -605,5 +515,5 @@ pub(in crate::app) fn settings_audio_track_button(
                         .child(option.detail),
                 ),
         )
-        .child(selection_dot(is_selected))
+        .child(frame_selection_dot(is_selected))
 }

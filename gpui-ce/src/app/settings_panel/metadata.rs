@@ -33,7 +33,7 @@ fn settings_metadata_mode_grid(
         let mode = option.mode;
         let is_enabled = !option.is_disabled;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("metadata-mode-{}", mode.id()),
                 option.label,
                 option.is_selected,

@@ -49,7 +49,7 @@ fn settings_images_pixel_format_section(
         let pixel_format = option.id;
         let enabled = !settings_disabled && !option.is_disabled;
         list = list.child(
-            settings_images_list_item(
+            frame_list_item_with_caption(
                 format!("images-pixel-format-{pixel_format}"),
                 option.label,
                 option.caption,
@@ -69,55 +69,4 @@ fn settings_images_pixel_format_section(
     }
 
     settings_section("PIXEL FORMAT").child(list)
-}
-
-fn settings_images_list_item(
-    id: impl Into<String>,
-    title: impl Into<String>,
-    caption: impl Into<String>,
-    selected: bool,
-    enabled: bool,
-) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Secondary, selected, enabled);
-
-    div()
-        .id(id.into())
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .child(
-            div()
-                .text_color(color(theme::FOREGROUND))
-                .child(title.into()),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_size(px(theme::TEXT_LABEL_SIZE))
-                .text_color(color(theme::FRAME_GRAY_600))
-                .child(caption.into()),
-        )
 }

@@ -144,45 +144,8 @@ fn settings_preset_row(
     let selected = option.is_selected;
     let status = option.status;
 
-    div()
-        .id(format!("preset-{}", preset.id))
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .rounded(px(theme::RADIUS_SM))
-        .border_l(px(2.0))
-        .border_color(color(if selected {
-            theme::FRAME_GRAY_600
-        } else {
-            theme::TRANSPARENT
-        }))
-        .bg(color(if selected {
-            theme::FRAME_GRAY_100
-        } else {
-            theme::TRANSPARENT
-        }))
-        .pl(px(if selected { 10.0 } else { 8.0 }))
+    frame_list_item(format!("preset-{}", preset.id), selected, is_enabled)
         .pr(px(4.0))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(if selected {
-            theme::FOREGROUND
-        } else {
-            theme::FRAME_GRAY_600
-        }))
-        .opacity(if !option.is_compatible || settings_disabled {
-            0.5
-        } else {
-            1.0
-        })
-        .when(is_enabled, |this| {
-            this.hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
-        })
-        .when(!is_enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(is_enabled, window, cx);
-        })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             cx.stop_propagation();
             if is_enabled && root.apply_preset_to_selected(&preset_id) {
@@ -206,7 +169,7 @@ fn settings_preset_row(
                     this.child(settings_preset_icon_button(
                         format!("settings-preset-apply-all-{}", apply_all_id),
                         assets::ICON_LIST_CHECKS,
-                        ButtonVariant::Ghost,
+                        FrameIconButtonVariant::Ghost,
                         !settings_disabled,
                         move |root, window, cx| {
                             root.confirm_apply_preset_to_all(apply_all_id.clone(), window, cx);
@@ -218,7 +181,7 @@ fn settings_preset_row(
                     this.child(settings_preset_icon_button(
                         format!("settings-preset-delete-{}", delete_id),
                         assets::ICON_TRASH,
-                        ButtonVariant::Default,
+                        FrameIconButtonVariant::Destructive,
                         !settings_disabled,
                         move |root, _window, cx| {
                             if root.delete_preset(&delete_id) {
@@ -234,53 +197,23 @@ fn settings_preset_row(
 fn settings_preset_icon_button(
     id: String,
     icon: &'static str,
-    variant: ButtonVariant,
+    variant: FrameIconButtonVariant,
     enabled: bool,
     action: impl Fn(&mut FrameRoot, &mut Window, &mut Context<FrameRoot>) + 'static,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(variant, false, enabled);
-    let icon_color = if matches!(variant, ButtonVariant::Default) {
-        color(theme::FOREGROUND)
-    } else {
-        color(colors.foreground)
-    };
-
-    div()
-        .id(id)
-        .w(px(24.0))
-        .h(px(24.0))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(theme::RADIUS_SM))
-        .bg(color(if matches!(variant, ButtonVariant::Default) {
-            theme::FRAME_RED
-        } else {
-            colors.background
-        }))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(if matches!(variant, ButtonVariant::Default) {
-                        theme::FRAME_RED.with_alpha(0.86)
-                    } else {
-                        colors.hover_background
-                    }))
-                    .cursor_pointer()
-            })
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .on_click(cx.listener(move |root, _: &ClickEvent, window, cx| {
-            cx.stop_propagation();
-            if enabled {
-                action(root, window, cx);
-            }
-        }))
-        .child(icon_svg(icon, 16.0, icon_color))
+    frame_icon_button(
+        id,
+        icon,
+        variant,
+        enabled,
+        FRAME_ICON_BUTTON_SM_SIZE,
+        FRAME_ICON_SM_SIZE,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, window, cx| {
+        cx.stop_propagation();
+        if enabled {
+            action(root, window, cx);
+        }
+    }))
 }

@@ -16,20 +16,46 @@ impl Render for SettingsSubtitleColorDragPreview {
     }
 }
 
-pub(in crate::app) fn settings_subtitles_tab(
-    config: &ConversionConfig,
-    metadata: Option<&SourceMetadata>,
-    settings_disabled: bool,
-    subtitle_fonts: &[String],
-    color_focuses: SettingsSubtitleColorInputFocuses<'_>,
+pub(in crate::app) struct SettingsSubtitlesTabState<'a> {
+    pub(in crate::app) config: &'a ConversionConfig,
+    pub(in crate::app) metadata: Option<&'a SourceMetadata>,
+    pub(in crate::app) settings_disabled: bool,
+    pub(in crate::app) subtitle_fonts: &'a [String],
+    pub(in crate::app) color_focuses: SettingsSubtitleColorInputFocuses<'a>,
+    pub(in crate::app) active_popover: Option<SettingsSubtitlePopover>,
+    pub(in crate::app) font_color_draft: &'a str,
+    pub(in crate::app) outline_color_draft: &'a str,
+}
+
+struct SettingsSubtitleStyleState<'a> {
+    config: &'a ConversionConfig,
+    disabled: bool,
+    subtitle_fonts: &'a [String],
+    color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     active_popover: Option<SettingsSubtitlePopover>,
-    font_color_draft: &str,
-    outline_color_draft: &str,
+    font_color_draft: &'a str,
+    outline_color_draft: &'a str,
+}
+
+struct SettingsSubtitleColorFieldSpec<'a> {
+    label: &'static str,
+    id: &'static str,
+    value: String,
+    disabled: bool,
+    target: SettingsSubtitleColorTarget,
+    focus: Option<&'a FocusHandle>,
+    is_open: bool,
+    draft: &'a str,
+}
+
+pub(in crate::app) fn settings_subtitles_tab(
+    state: SettingsSubtitlesTabState<'_>,
     window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
+    let config = state.config;
     let copy_mode = config.processing_mode == ProcessingMode::Copy;
-    let burn_in_disabled = settings_disabled || copy_mode;
+    let burn_in_disabled = state.settings_disabled || copy_mode;
     let content = div().flex().flex_col().gap_4().child(
         settings_section("BURN-IN SUBTITLES")
             .child(settings_subtitle_burn_button(config, burn_in_disabled, cx))
@@ -45,20 +71,22 @@ pub(in crate::app) fn settings_subtitles_tab(
     } else {
         content.child(
             settings_section("STYLE").child(settings_subtitle_style_controls(
-                config,
-                burn_in_disabled,
-                subtitle_fonts,
-                color_focuses,
-                active_popover,
-                font_color_draft,
-                outline_color_draft,
+                SettingsSubtitleStyleState {
+                    config,
+                    disabled: burn_in_disabled,
+                    subtitle_fonts: state.subtitle_fonts,
+                    color_focuses: state.color_focuses,
+                    active_popover: state.active_popover,
+                    font_color_draft: state.font_color_draft,
+                    outline_color_draft: state.outline_color_draft,
+                },
                 window,
                 cx,
             )),
         )
     };
 
-    let track_options = subtitle_track_options(config, metadata, settings_disabled);
+    let track_options = subtitle_track_options(config, state.metadata, state.settings_disabled);
     if track_options.is_empty() {
         return content
             .child(settings_section("SOURCE TRACKS").child(settings_hint_text("No subtitles")));
@@ -165,13 +193,7 @@ fn settings_subtitle_clear_button(
 }
 
 fn settings_subtitle_style_controls(
-    config: &ConversionConfig,
-    disabled: bool,
-    subtitle_fonts: &[String],
-    color_focuses: SettingsSubtitleColorInputFocuses<'_>,
-    active_popover: Option<SettingsSubtitlePopover>,
-    font_color_draft: &str,
-    outline_color_draft: &str,
+    state: SettingsSubtitleStyleState<'_>,
     window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
@@ -185,16 +207,16 @@ fn settings_subtitle_style_controls(
                 .grid_cols(2)
                 .gap_2()
                 .child(settings_subtitle_font_select(
-                    config,
-                    disabled,
-                    subtitle_fonts,
-                    active_popover == Some(SettingsSubtitlePopover::FontName),
+                    state.config,
+                    state.disabled,
+                    state.subtitle_fonts,
+                    state.active_popover == Some(SettingsSubtitlePopover::FontName),
                     cx,
                 ))
                 .child(settings_subtitle_font_size_select(
-                    config,
-                    disabled,
-                    active_popover == Some(SettingsSubtitlePopover::FontSize),
+                    state.config,
+                    state.disabled,
+                    state.active_popover == Some(SettingsSubtitlePopover::FontSize),
                     cx,
                 )),
         )
@@ -204,32 +226,37 @@ fn settings_subtitle_style_controls(
                 .grid_cols(2)
                 .gap_2()
                 .child(settings_subtitle_color_field(
-                    "TEXT COLOR",
-                    "settings-subtitle-font-color",
-                    subtitle_color_value(
-                        config.subtitle_font_color.as_ref(),
-                        DEFAULT_SUBTITLE_FONT_COLOR,
-                    ),
-                    disabled,
-                    true,
-                    color_focuses.font,
-                    active_popover == Some(SettingsSubtitlePopover::FontColor),
-                    font_color_draft,
+                    SettingsSubtitleColorFieldSpec {
+                        label: "TEXT COLOR",
+                        id: "settings-subtitle-font-color",
+                        value: subtitle_color_value(
+                            state.config.subtitle_font_color.as_ref(),
+                            DEFAULT_SUBTITLE_FONT_COLOR,
+                        ),
+                        disabled: state.disabled,
+                        target: SettingsSubtitleColorTarget::Font,
+                        focus: state.color_focuses.font,
+                        is_open: state.active_popover == Some(SettingsSubtitlePopover::FontColor),
+                        draft: state.font_color_draft,
+                    },
                     window,
                     cx,
                 ))
                 .child(settings_subtitle_color_field(
-                    "OUTLINE COLOR",
-                    "settings-subtitle-outline-color",
-                    subtitle_color_value(
-                        config.subtitle_outline_color.as_ref(),
-                        DEFAULT_SUBTITLE_OUTLINE_COLOR,
-                    ),
-                    disabled,
-                    false,
-                    color_focuses.outline,
-                    active_popover == Some(SettingsSubtitlePopover::OutlineColor),
-                    outline_color_draft,
+                    SettingsSubtitleColorFieldSpec {
+                        label: "OUTLINE COLOR",
+                        id: "settings-subtitle-outline-color",
+                        value: subtitle_color_value(
+                            state.config.subtitle_outline_color.as_ref(),
+                            DEFAULT_SUBTITLE_OUTLINE_COLOR,
+                        ),
+                        disabled: state.disabled,
+                        target: SettingsSubtitleColorTarget::Outline,
+                        focus: state.color_focuses.outline,
+                        is_open: state.active_popover
+                            == Some(SettingsSubtitlePopover::OutlineColor),
+                        draft: state.outline_color_draft,
+                    },
                     window,
                     cx,
                 )),
@@ -240,7 +267,11 @@ fn settings_subtitle_style_controls(
                 .flex_col()
                 .gap_2()
                 .child(settings_field_label("POSITION"))
-                .child(settings_subtitle_position_grid(config, disabled, cx)),
+                .child(settings_subtitle_position_grid(
+                    state.config,
+                    state.disabled,
+                    cx,
+                )),
         )
         .child(settings_hint_text(
             "Style applies to burned-in subtitles only.",
@@ -511,26 +542,23 @@ fn settings_subtitle_select_option(
 }
 
 fn settings_subtitle_color_field(
-    label: &'static str,
-    id: &'static str,
-    value: String,
-    disabled: bool,
-    is_font_color: bool,
-    focus: Option<&FocusHandle>,
-    is_open: bool,
-    draft: &str,
+    spec: SettingsSubtitleColorFieldSpec<'_>,
     window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
-    let target = if is_font_color {
-        SettingsSubtitleColorTarget::Font
-    } else {
-        SettingsSubtitleColorTarget::Outline
-    };
-    let popover = if is_font_color {
-        SettingsSubtitlePopover::FontColor
-    } else {
-        SettingsSubtitlePopover::OutlineColor
+    let SettingsSubtitleColorFieldSpec {
+        label,
+        id,
+        value,
+        disabled,
+        target,
+        focus,
+        is_open,
+        draft,
+    } = spec;
+    let popover = match target {
+        SettingsSubtitleColorTarget::Font => SettingsSubtitlePopover::FontColor,
+        SettingsSubtitleColorTarget::Outline => SettingsSubtitlePopover::OutlineColor,
     };
     let enabled = !disabled;
     let colors = button_colors(ButtonVariant::Secondary, false, enabled);
@@ -1058,7 +1086,7 @@ fn settings_subtitle_position_grid(
         let position = option.position;
         let is_enabled = !option.is_disabled;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("subtitle-position-{}", position.id()),
                 option.label,
                 option.is_selected,
@@ -1157,5 +1185,5 @@ pub(in crate::app) fn settings_subtitle_track_button(
                     )
                 }),
         )
-        .child(selection_dot(is_selected))
+        .child(frame_selection_dot(is_selected))
 }

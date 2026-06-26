@@ -57,7 +57,7 @@ pub(in crate::app) fn settings_processing_mode_grid(
         let mode = option.mode;
         let is_enabled = !option.is_disabled;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("output-mode-{}", option.mode.id()),
                 option.label,
                 option.is_selected,
@@ -93,7 +93,7 @@ pub(in crate::app) fn settings_container_grid(
         let container = option.container;
         let is_enabled = !option.is_disabled;
         grid = grid.child(
-            settings_choice_button(
+            frame_choice_button(
                 format!("output-container-{container}"),
                 container.to_uppercase(),
                 option.is_selected,

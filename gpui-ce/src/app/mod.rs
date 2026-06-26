@@ -1,4 +1,5 @@
 mod chrome;
+mod components;
 mod conversion;
 mod file_list_panel;
 mod files;
@@ -144,8 +145,6 @@ actions!(
 const FILE_LIST_ACTIONS_WIDTH: f32 = 64.0;
 const FILE_LIST_ACTION_BUTTON_SIZE: f32 = 24.0;
 const FILE_LIST_ACTION_ICON_SIZE: f32 = 16.0;
-const FILE_LIST_CHECKBOX_SIZE: f32 = 14.0;
-const FILE_LIST_CHECK_ICON_SIZE: f32 = 12.0;
 const LOG_LINE_NUMBER_WIDTH: f32 = 32.0;
 const LOG_LINE_HEIGHT: f32 = 24.0;
 const TRAFFIC_LIGHT_GROUP: &str = "titlebar-traffic-lights";
