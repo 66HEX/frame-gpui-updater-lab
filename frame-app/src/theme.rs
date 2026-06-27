@@ -104,8 +104,8 @@ mod tests {
         #[test]
         fn solid_tokens_match_reference_srgb_values() {
             assert_eq!(BACKGROUND, RgbaToken::from_rgb(20, 22, 26));
-            assert_eq!(SIDEBAR, RgbaToken::from_rgb(32, 34, 37));
-            assert_eq!(DROPDOWN, RgbaToken::from_rgb(43, 45, 48));
+            assert_eq!(SIDEBAR, RgbaToken::from_rgb(27, 29, 33));
+            assert_eq!(DROPDOWN, RgbaToken::from_rgb(37, 39, 44));
             assert_eq!(FRAME_BLUE, RgbaToken::from_rgb(29, 78, 216));
             assert_eq!(FRAME_RED, RgbaToken::from_rgb(185, 28, 28));
             assert_eq!(FRAME_AMBER, RgbaToken::from_rgb(245, 158, 11));

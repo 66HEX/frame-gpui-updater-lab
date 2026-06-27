@@ -106,7 +106,9 @@ details, tier suggestions, and a launch checklist.
 - **Real-time Telemetry:** FFmpeg progress and log events are parsed and shown
   in the app while conversions run.
 - **Runtime Binaries:** Local development uses platform-specific FFmpeg and
-  FFprobe binaries under `frame-app/resources/binaries/`.
+  FFprobe binaries under `frame-app/resources/binaries/`. Native bundles include
+  the same binaries and detect encoder capabilities from the bundled FFmpeg at
+  startup.
 
 ## Technical Stack
 
@@ -209,7 +211,7 @@ node scripts/setup-ffmpeg.cjs
 
   ```bash
   cargo install cargo-bundle
-  cargo bundle --manifest-path frame-app/Cargo.toml --release
+  scripts/bundle-macos
   ```
 
 - **Linux tarball with `.desktop` metadata and hicolor icons:**
@@ -252,6 +254,7 @@ cargo test --manifest-path frame-app/Cargo.toml
 cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
 cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
 node --check scripts/setup-ffmpeg.cjs
+bash -n scripts/bundle-macos
 bash -n scripts/bundle-linux
 ```
 

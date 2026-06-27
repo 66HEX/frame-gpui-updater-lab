@@ -40,6 +40,7 @@ image = "0.25.10"
 name = "Frame"
 identifier = "Frame"
 icon = ["resources/app-icons/icon.png"]
+resources = ["resources/binaries"]
 osx_minimum_system_version = "10.15.7"
 
 [lints.rust]

@@ -19,7 +19,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 mod workspace;
-pub use runtime::{frame_window_options, init_app};
+pub use runtime::{frame_window_options, init_app, open_frame_window};
 
 use chrome::{app_settings_sheet, drag_drop_overlay, titlebar};
 use input::{FrameTextInputKind, FrameTextInputUiState};
@@ -51,6 +51,7 @@ use crate::{
     app_info::FRAME_APP_ID,
     app_persistence::{AppPersistence, AppSettings},
     assets::{self},
+    capabilities::detect_available_encoders,
     conversion_events::{ActiveLogFile, ConversionEventState, LogLine, all_conversions_settled},
     conversion_runner::{
         ConversionProcessController, conversion_task_from_file, run_conversion_batch_with_control,

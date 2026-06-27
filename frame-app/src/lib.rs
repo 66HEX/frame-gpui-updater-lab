@@ -4,6 +4,7 @@ pub mod app;
 pub mod app_info;
 pub mod app_persistence;
 pub mod assets;
+pub mod capabilities;
 pub mod conversion_events;
 pub mod conversion_runner;
 pub mod file_filters;

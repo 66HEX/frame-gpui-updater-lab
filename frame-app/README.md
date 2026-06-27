@@ -17,5 +17,8 @@ The app intentionally stays self-contained here: local Frame UI wrappers are bui
 - `src/assets/` embeds only files from `frame-app/assets/`.
 - `resources/app-icons/` contains the native desktop package icon set consumed
   by `build.rs`, `cargo bundle`, and Linux packaging.
+- `resources/binaries/` is an ignored local setup output for FFmpeg and
+  FFprobe. Production package scripts copy the target platform binaries into
+  the native bundle.
 
-Build output stays under `frame-app/target/` and is ignored by `frame-app/.gitignore`. macOS-specific native-window glue is limited to hiding AppKit's standard titlebar buttons so the custom Frame controls are the only visible traffic lights. Windows icons are embedded by `build.rs`; Linux packages should use `scripts/bundle-linux` so the `.desktop` file and hicolor icons are installed together.
+Build output stays under `frame-app/target/` and is ignored by `frame-app/.gitignore`. macOS-specific native-window glue is limited to hiding AppKit's standard titlebar buttons so the custom Frame controls are the only visible traffic lights. Windows icons are embedded by `build.rs`; macOS packages should use `scripts/bundle-macos`, and Linux packages should use `scripts/bundle-linux` so runtime binaries and desktop metadata are installed together.

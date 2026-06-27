@@ -6,6 +6,7 @@ use std::{
 };
 
 pub const BINARIES_RESOURCE_DIR: &str = "resources/binaries";
+pub const BUNDLED_BINARIES_DIR: &str = "binaries";
 
 const FFMPEG_ENV_VAR: &str = "FRAME_FFMPEG_PATH";
 const FFPROBE_ENV_VAR: &str = "FRAME_FFPROBE_PATH";
@@ -80,10 +81,18 @@ fn binary_candidates(file_name: &str) -> Vec<PathBuf> {
         && let Some(exe_dir) = current_exe.parent()
     {
         candidates.push(exe_dir.join(BINARIES_RESOURCE_DIR).join(file_name));
-        candidates.push(exe_dir.join("binaries").join(file_name));
+        candidates.push(exe_dir.join(BUNDLED_BINARIES_DIR).join(file_name));
 
         #[cfg(target_os = "macos")]
-        candidates.push(exe_dir.join("../Resources/binaries").join(file_name));
+        {
+            candidates.push(exe_dir.join("../Resources/binaries").join(file_name));
+            candidates.push(
+                exe_dir
+                    .join("../Resources")
+                    .join(BINARIES_RESOURCE_DIR)
+                    .join(file_name),
+            );
+        }
     }
 
     candidates
@@ -152,5 +161,18 @@ mod tests {
     #[test]
     fn resolved_executable_falls_back_to_tool_name() {
         assert_eq!(resolved_executable(None, "ffmpeg", &[]), "ffmpeg");
+    }
+
+    #[test]
+    fn binary_candidates_include_macos_bundle_resource_path() {
+        let candidates = binary_candidates("ffmpeg-test");
+
+        if cfg!(target_os = "macos") {
+            assert!(
+                candidates.iter().any(
+                    |candidate| candidate.ends_with("Resources/resources/binaries/ffmpeg-test")
+                )
+            );
+        }
     }
 }

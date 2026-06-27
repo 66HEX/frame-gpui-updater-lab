@@ -45,6 +45,18 @@ pub fn init_app(cx: &mut App, name: impl Into<SharedString>) {
     .detach();
 }
 
+pub fn open_frame_window(cx: &mut App) {
+    let bounds = Bounds::centered(None, size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT)), cx);
+    cx.open_window(frame_window_options(bounds), |_, cx| {
+        cx.new(|cx| {
+            let mut root = FrameRoot::new_with_platform_persistence();
+            root.load_runtime_capabilities(cx);
+            root
+        })
+    })
+    .expect("failed to open Frame GPUI window");
+}
+
 pub fn frame_window_options(bounds: Bounds<Pixels>) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),

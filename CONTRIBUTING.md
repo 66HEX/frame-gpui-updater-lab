@@ -59,7 +59,7 @@ To build and run Frame locally, you will need:
 
    ```bash
    cargo install cargo-bundle
-   cargo bundle --manifest-path frame-app/Cargo.toml --release
+   scripts/bundle-macos
    scripts/bundle-linux
    ```
 
@@ -113,6 +113,7 @@ cargo test --manifest-path frame-app/Cargo.toml
 cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
 cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
 node --check scripts/setup-ffmpeg.cjs
+bash -n scripts/bundle-macos
 bash -n scripts/bundle-linux
 ```
 

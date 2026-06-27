@@ -13,6 +13,24 @@ impl FrameRoot {
         }
     }
 
+    pub fn load_runtime_capabilities(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let detected = cx
+                .background_spawn(async { detect_available_encoders() })
+                .await;
+
+            this.update(cx, |root, cx| {
+                match detected {
+                    Ok(encoders) => root.available_encoders = encoders,
+                    Err(error) => eprintln!("Failed to detect FFmpeg capabilities: {error}"),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     #[cfg(test)]
     pub(crate) fn new_with_notifier(notifier: AppNotifier) -> Self {
         Self::new_inner(None, AppSettings::default(), notifier)
