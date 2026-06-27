@@ -1,4 +1,4 @@
-use frame_gpui_ce::{
+use frame_app::{
     WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH,
     app::{FrameRoot, frame_window_options, init_app},
     assets::{self, FrameAssets},

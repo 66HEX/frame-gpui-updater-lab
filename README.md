@@ -106,7 +106,7 @@ details, tier suggestions, and a launch checklist.
 - **Real-time Telemetry:** FFmpeg progress and log events are parsed and shown
   in the app while conversions run.
 - **Runtime Binaries:** Local development uses platform-specific FFmpeg and
-  FFprobe binaries under `gpui-ce/resources/binaries/`.
+  FFprobe binaries under `frame-app/resources/binaries/`.
 
 ## Technical Stack
 
@@ -183,7 +183,7 @@ cd frame
 **3. Setup Runtime Binaries**
 
 Frame requires FFmpeg and FFprobe runtime binaries. The setup script downloads
-the platform-specific tools into `gpui-ce/resources/binaries/`, which is
+the platform-specific tools into `frame-app/resources/binaries/`, which is
 intentionally ignored by git:
 
 ```bash
@@ -195,13 +195,13 @@ node scripts/setup-ffmpeg.cjs
 - **Development:**
 
   ```bash
-  cargo run --manifest-path gpui-ce/Cargo.toml
+  cargo run --manifest-path frame-app/Cargo.toml
   ```
 
 - **Production Build:**
 
   ```bash
-  cargo build --manifest-path gpui-ce/Cargo.toml --release
+  cargo build --manifest-path frame-app/Cargo.toml --release
   ```
 
 ## Usage
@@ -228,11 +228,11 @@ Run the main checks before submitting changes:
 
 ```bash
 cargo fmt --manifest-path frame-core/Cargo.toml --check
-cargo fmt --manifest-path gpui-ce/Cargo.toml --check
+cargo fmt --manifest-path frame-app/Cargo.toml --check
 cargo test --manifest-path frame-core/Cargo.toml
-cargo test --manifest-path gpui-ce/Cargo.toml
+cargo test --manifest-path frame-app/Cargo.toml
 cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
-cargo clippy --manifest-path gpui-ce/Cargo.toml --all-targets -- -D warnings
+cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
 node --check scripts/setup-ffmpeg.cjs
 ```
 

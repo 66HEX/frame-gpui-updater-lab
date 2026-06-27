@@ -160,7 +160,7 @@ mod file_item {
     }
 
     fn temp_file_path(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("frame-gpui-ce-{}-{name}", std::process::id()))
+        std::env::temp_dir().join(format!("frame-app-{}-{name}", std::process::id()))
     }
 }
 

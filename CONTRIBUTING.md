@@ -9,7 +9,7 @@ the current project structure, local setup, checks, and pull request standards.
 - **Core Engine:** FFmpeg and FFprobe runtime binaries.
 - **Shared Logic:** `frame-core` for conversion arguments, probing data,
   compatibility rules, filters, and validation.
-- **Native UI:** `gpui-ce` for the application shell, GPUI views, app state,
+- **Native UI:** `frame-app` for the application shell, GPUI views, app state,
   dialogs, bundled assets, and runtime integration.
 - **Setup Scripts:** Node.js scripts for downloading local FFmpeg/FFprobe
   binaries.
@@ -36,7 +36,7 @@ To build and run Frame locally, you will need:
 
 2. **Setup FFmpeg binaries:**
 
-   The application looks for FFmpeg and FFprobe in `gpui-ce/resources/binaries/`
+   The application looks for FFmpeg and FFprobe in `frame-app/resources/binaries/`
    during local development. Download the platform-specific tools with:
 
    ```bash
@@ -46,25 +46,25 @@ To build and run Frame locally, you will need:
 3. **Run in development mode:**
 
    ```bash
-   cargo run --manifest-path gpui-ce/Cargo.toml
+   cargo run --manifest-path frame-app/Cargo.toml
    ```
 
 4. **Build a release binary:**
 
    ```bash
-   cargo build --manifest-path gpui-ce/Cargo.toml --release
+   cargo build --manifest-path frame-app/Cargo.toml --release
    ```
 
 ## Development Workflow
 
 ### Project Structure
 
-- `gpui-ce/`: native GPUI-CE application, views, app state, dialogs, runtime
+- `frame-app/`: native GPUI-CE application, views, app state, dialogs, runtime
   binary lookup, bundled assets, and package app icons.
-- `gpui-ce/src/app/`: `FrameRoot`, workspace/logs rendering, settings panels,
+- `frame-app/src/app/`: `FrameRoot`, workspace/logs rendering, settings panels,
   preview shell, import flow, conversion actions, and UI primitives.
-- `gpui-ce/src/file_queue/`, `gpui-ce/src/settings/`, `gpui-ce/src/preview/`,
-  and `gpui-ce/src/conversion_runner/`: tested domain logic kept outside
+- `frame-app/src/file_queue/`, `frame-app/src/settings/`, `frame-app/src/preview/`,
+  and `frame-app/src/conversion_runner/`: tested domain logic kept outside
   rendering code where possible.
 - `frame-core/`: shared conversion/probe logic, FFmpeg argument construction,
   filters, media compatibility rules, and conversion event types.
@@ -78,14 +78,14 @@ To build and run Frame locally, you will need:
 
 - **Rust formatting:** run `cargo fmt` for touched crates before submitting.
 - **Rust linting:** keep `cargo clippy --all-targets -- -D warnings` clean.
-- **Architecture:** prefer existing `gpui-ce/src/app/primitives.rs` UI building
+- **Architecture:** prefer existing `frame-app/src/app/primitives.rs` UI building
   blocks and domain modules before adding new ad hoc rendering code.
 - **Conversion Logic:** add FFmpeg behavior in `frame-core` first, then bridge it
-  into `gpui-ce` through typed settings/configuration code.
+  into `frame-app` through typed settings/configuration code.
 - **Media Compatibility:** update `frame-core/media-rules.json` and focused tests
   when adding formats, codecs, stream-copy rules, or pixel formats.
 - **Runtime Binaries:** do not commit downloaded files from
-  `gpui-ce/resources/binaries/`.
+  `frame-app/resources/binaries/`.
 
 ### Testing & Quality Control
 
@@ -93,11 +93,11 @@ Before submitting a PR, run the relevant checks:
 
 ```bash
 cargo fmt --manifest-path frame-core/Cargo.toml --check
-cargo fmt --manifest-path gpui-ce/Cargo.toml --check
+cargo fmt --manifest-path frame-app/Cargo.toml --check
 cargo test --manifest-path frame-core/Cargo.toml
-cargo test --manifest-path gpui-ce/Cargo.toml
+cargo test --manifest-path frame-app/Cargo.toml
 cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
-cargo clippy --manifest-path gpui-ce/Cargo.toml --all-targets -- -D warnings
+cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
 node --check scripts/setup-ffmpeg.cjs
 ```
 

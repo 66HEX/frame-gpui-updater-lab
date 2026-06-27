@@ -1826,18 +1826,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "frame-core"
-version = "0.1.0"
-dependencies = [
- "font-kit",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "frame-gpui-ce"
+name = "frame-app"
 version = "0.1.0"
 dependencies = [
  "frame-core",
@@ -1847,6 +1836,17 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "raw-window-handle",
  "rfd",
+]
+
+[[package]]
+name = "frame-core"
+version = "0.1.0"
+dependencies = [
+ "font-kit",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -5,5 +5,5 @@
 
 /target
 /frame-core/target
-/gpui-ce/target
-/gpui-ce/resources/binaries/
+/frame-app/target
+/frame-app/resources/binaries/

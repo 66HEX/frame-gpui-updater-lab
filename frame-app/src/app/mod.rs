@@ -126,7 +126,7 @@ use std::{
 };
 
 actions!(
-    frame_gpui_ce,
+    frame_app,
     [
         Quit,
         TextInputBackspace,

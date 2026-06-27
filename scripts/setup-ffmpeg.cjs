@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fetches FFmpeg and FFprobe binaries for the current platform/architecture
- * and installs them into gpui-ce/resources/binaries.
+ * and installs them into frame-app/resources/binaries.
  * Usage: node scripts/setup-ffmpeg.cjs [--force]
  */
 const os = require('os');
@@ -27,7 +27,7 @@ const platformArgIndex = process.argv.indexOf('--platform');
 const platformOverride = platformArgIndex !== -1 ? process.argv[platformArgIndex + 1] : null;
 
 const repoRoot = path.resolve(__dirname, '..');
-const BIN_DIR = path.join(repoRoot, 'gpui-ce', 'resources', 'binaries');
+const BIN_DIR = path.join(repoRoot, 'frame-app', 'resources', 'binaries');
 const TMP_ROOT_PREFIX = path.join(os.tmpdir(), 'frame-binaries-');
 
 const MARTIN_BASE = 'https://ffmpeg.martin-riedl.de/redirect/latest';
@@ -148,7 +148,7 @@ async function main() {
 		await safeRm(tmpDir);
 	}
 
-	console.log('All binaries are ready in gpui-ce/resources/binaries.');
+	console.log('All binaries are ready in frame-app/resources/binaries.');
 }
 
 async function processIndividual(entry, tmpDir) {
