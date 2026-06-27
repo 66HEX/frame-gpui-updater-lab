@@ -105,7 +105,12 @@ mod frame_assets {
 
     #[test]
     fn frame_font_family_matches_bundled_font_name_table_family() {
-        assert_eq!(FRAME_FONT_FAMILY, "Ioskeley Mono Heavy");
+        assert_eq!(FRAME_FONT_FAMILY, "Ioskeley Mono");
+    }
+
+    #[test]
+    fn frame_font_weight_matches_bundled_font_face_weight() {
+        assert_eq!(FRAME_FONT_WEIGHT, gpui::FontWeight::EXTRA_BOLD);
     }
 
     #[test]

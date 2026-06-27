@@ -103,10 +103,10 @@ use frame_core::events::ConversionEvent;
 use frame_core::types::DEFAULT_MAX_CONCURRENCY;
 use gpui::{
     App, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, DragMoveEvent, Element, ElementId,
-    ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, FontWeight,
-    GlobalElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, PathPromptOptions,
-    Pixels, Point, Position, PromptButton, PromptLevel, Render, Rgba, ShapedLine, SharedString,
+    ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, GlobalElementId,
+    InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, PathPromptOptions, Pixels, Point,
+    Position, PromptButton, PromptLevel, Render, Rgba, ShapedLine, SharedString,
     StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
     UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
     WindowDecorations, WindowOptions, actions, deferred, div, fill, hsla, linear_color_stop,

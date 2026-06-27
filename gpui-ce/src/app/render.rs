@@ -154,7 +154,7 @@ impl Render for FrameRoot {
             .bg(color(theme::BACKGROUND))
             .text_color(color(theme::FOREGROUND))
             .font_family(assets::FRAME_FONT_FAMILY)
-            .font_weight(FontWeight::SEMIBOLD)
+            .font_weight(assets::FRAME_FONT_WEIGHT)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|root, _event: &MouseDownEvent, _window, cx| {
