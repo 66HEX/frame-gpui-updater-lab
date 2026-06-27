@@ -49,12 +49,13 @@ impl Element for SettingsSubtitleColorBoundsProbe {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.position = Position::Absolute;
-        style.flex_grow = 1.0;
-        style.flex_shrink = 1.0;
-        style.size.width = relative(1.0).into();
-        style.size.height = relative(1.0).into();
+        let style = Style {
+            position: Position::Absolute,
+            size: size(relative(1.0).into(), relative(1.0).into()),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            ..Style::default()
+        };
 
         (window.request_layout(style, [], cx), ())
     }

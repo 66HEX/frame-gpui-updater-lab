@@ -165,7 +165,7 @@ mod tests {
         #[test]
         fn auxiliary_text_tokens_match_remaining_svelte_contexts() {
             assert_eq!(TEXT_EMOJI_SIZE, 16.0);
-            assert_eq!(TEXT_MARKDOWN_SIZE, 11.0);
+            assert_eq!(TEXT_MARKDOWN_SIZE, 10.0);
             assert_eq!(TEXT_MARKDOWN_LIST_SIZE, 10.0);
             assert_eq!(TEXT_INPUT_CARET_HEIGHT, 14.0);
         }
