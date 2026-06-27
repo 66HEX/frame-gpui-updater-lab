@@ -106,7 +106,7 @@ use gpui::{
     ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, FontWeight,
     GlobalElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, PathPromptOptions,
-    Pixels, Point, PromptButton, PromptLevel, Render, Rgba, ShapedLine, SharedString,
+    Pixels, Point, Position, PromptButton, PromptLevel, Render, Rgba, ShapedLine, SharedString,
     StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
     UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
     WindowDecorations, WindowOptions, actions, deferred, div, fill, hsla, linear_color_stop,
@@ -227,6 +227,7 @@ pub struct FrameRoot {
     settings_subtitle_popover: Option<SettingsSubtitlePopover>,
     subtitle_font_color_draft: String,
     subtitle_outline_color_draft: String,
+    subtitle_color_picker_bounds: SettingsSubtitleColorPickerBounds,
     preview_crop_file_id: Option<String>,
     preview_crop_mode: bool,
     preview_draft_crop: Option<CropRect>,
@@ -274,6 +275,14 @@ pub(in crate::app) enum SettingsSubtitleColorDragKind {
 pub(in crate::app) struct SettingsSubtitleColorDrag {
     target: SettingsSubtitleColorTarget,
     kind: SettingsSubtitleColorDragKind,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SettingsSubtitleColorPickerBounds {
+    font_sv: Option<Bounds<Pixels>>,
+    font_hue: Option<Bounds<Pixels>>,
+    outline_sv: Option<Bounds<Pixels>>,
+    outline_hue: Option<Bounds<Pixels>>,
 }
 
 #[derive(Clone, Copy)]

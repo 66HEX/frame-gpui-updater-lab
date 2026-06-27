@@ -16,6 +16,76 @@ impl Render for SettingsSubtitleColorDragPreview {
     }
 }
 
+struct SettingsSubtitleColorBoundsProbe {
+    owner: Entity<FrameRoot>,
+    target: SettingsSubtitleColorTarget,
+    kind: SettingsSubtitleColorDragKind,
+}
+
+impl IntoElement for SettingsSubtitleColorBoundsProbe {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for SettingsSubtitleColorBoundsProbe {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let mut style = Style::default();
+        style.position = Position::Absolute;
+        style.flex_grow = 1.0;
+        style.flex_shrink = 1.0;
+        style.size.width = relative(1.0).into();
+        style.size.height = relative(1.0).into();
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        self.owner.update(cx, |root, _cx| {
+            root.set_subtitle_color_picker_bounds(self.target, self.kind, bounds);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+}
+
 pub(in crate::app) struct SettingsSubtitlesTabState<'a> {
     pub(in crate::app) config: &'a ConversionConfig,
     pub(in crate::app) metadata: Option<&'a SourceMetadata>,
@@ -158,27 +228,32 @@ fn settings_subtitle_clear_button(
     disabled: bool,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Default, true, !disabled);
-
     div()
         .id("settings-subtitle-clear-file")
         .absolute()
-        .right(px(10.0))
+        .right(px(12.0))
         .w(px(20.0))
         .h(px(20.0))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(theme::FRAME_RED))
-        .text_color(color(colors.foreground))
+        .bg(color(theme::FRAME_GRAY_100))
+        .text_color(color(theme::FRAME_RED))
         .opacity(if disabled { 0.5 } else { 1.0 })
+        .shadow(button_highlight_shadows())
         .when(!disabled, |this| {
             this.hover(|style| {
                 style
-                    .bg(color(theme::FRAME_RED.with_alpha(0.86)))
+                    .bg(color(theme::FRAME_GRAY_200))
+                    .text_color(color(theme::FRAME_RED))
                     .cursor_pointer()
             })
+            .active(|style| style.bg(color(theme::FRAME_GRAY_200)))
+        })
+        .when(disabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(!disabled, window, cx);
         })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
             cx.stop_propagation();
@@ -189,7 +264,7 @@ fn settings_subtitle_clear_button(
                 cx.notify();
             }
         }))
-        .child(icon_svg(assets::ICON_CLOSE, 12.0, color(theme::FOREGROUND)))
+        .child(icon_svg(assets::ICON_CLOSE, 12.0, color(theme::FRAME_RED)))
 }
 
 fn settings_subtitle_style_controls(
@@ -311,11 +386,12 @@ fn settings_subtitle_font_select(
     if is_open && has_options {
         let mut list = div()
             .absolute()
+            .id("settings-subtitle-font-options")
             .top(px(SUBTITLE_DROPDOWN_TOP_OFFSET + 20.0))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
-            .overflow_hidden()
+            .overflow_y_scroll()
             .rounded(px(theme::RADIUS_SM))
             .bg(color(theme::DROPDOWN))
             .shadow(button_highlight_shadows())
@@ -365,11 +441,12 @@ fn settings_subtitle_font_size_select(
     if is_open {
         let mut list = div()
             .absolute()
+            .id("settings-subtitle-font-size-options")
             .top(px(SUBTITLE_DROPDOWN_TOP_OFFSET + 20.0))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
-            .overflow_hidden()
+            .overflow_y_scroll()
             .rounded(px(theme::RADIUS_SM))
             .bg(color(theme::DROPDOWN))
             .shadow(button_highlight_shadows())
@@ -435,6 +512,7 @@ fn settings_subtitle_select_trigger(
         }))
         .child(
             div()
+                .flex_1()
                 .min_w_0()
                 .truncate()
                 .text_color(color(theme::FOREGROUND))
@@ -610,6 +688,7 @@ fn settings_subtitle_color_field(
                 .child(
                     div()
                         .flex()
+                        .flex_1()
                         .min_w_0()
                         .items_center()
                         .gap_2()
@@ -726,9 +805,19 @@ fn settings_subtitle_sv_square(
         .bg(hue)
         .cursor_crosshair()
         .occlude()
-        .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
-            cx.stop_propagation();
-        })
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |root, event: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+                if root.commit_subtitle_color_at_position(
+                    target,
+                    SettingsSubtitleColorDragKind::SaturationValue,
+                    event.position,
+                ) {
+                    cx.notify();
+                }
+            }),
+        )
         .on_drag_move(cx.listener(
             |root, event: &DragMoveEvent<SettingsSubtitleColorDrag>, _window, cx| {
                 let drag = *event.drag(cx);
@@ -746,6 +835,11 @@ fn settings_subtitle_sv_square(
                 }
             },
         ))
+        .child(SettingsSubtitleColorBoundsProbe {
+            owner: cx.entity(),
+            target,
+            kind: SettingsSubtitleColorDragKind::SaturationValue,
+        })
         .child(
             div()
                 .absolute()
@@ -816,9 +910,19 @@ fn settings_subtitle_hue_slider(
         .h(px(18.0))
         .w_full()
         .cursor_ew_resize()
-        .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
-            cx.stop_propagation();
-        })
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |root, event: &MouseDownEvent, _window, cx| {
+                cx.stop_propagation();
+                if root.commit_subtitle_color_at_position(
+                    target,
+                    SettingsSubtitleColorDragKind::Hue,
+                    event.position,
+                ) {
+                    cx.notify();
+                }
+            }),
+        )
         .on_drag_move(cx.listener(
             |root, event: &DragMoveEvent<SettingsSubtitleColorDrag>, _window, cx| {
                 let drag = *event.drag(cx);
@@ -836,6 +940,11 @@ fn settings_subtitle_hue_slider(
                 }
             },
         ))
+        .child(SettingsSubtitleColorBoundsProbe {
+            owner: cx.entity(),
+            target,
+            kind: SettingsSubtitleColorDragKind::Hue,
+        })
         .child(settings_subtitle_hue_segments())
         .child(
             div()
@@ -969,6 +1078,73 @@ impl FrameRoot {
                 SettingsSubtitleColorTarget::Font => DEFAULT_SUBTITLE_FONT_COLOR.to_string(),
                 SettingsSubtitleColorTarget::Outline => DEFAULT_SUBTITLE_OUTLINE_COLOR.to_string(),
             })
+    }
+
+    fn set_subtitle_color_picker_bounds(
+        &mut self,
+        target: SettingsSubtitleColorTarget,
+        kind: SettingsSubtitleColorDragKind,
+        bounds: Bounds<Pixels>,
+    ) {
+        match (target, kind) {
+            (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::SaturationValue) => {
+                self.subtitle_color_picker_bounds.font_sv = Some(bounds);
+            }
+            (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::Hue) => {
+                self.subtitle_color_picker_bounds.font_hue = Some(bounds);
+            }
+            (
+                SettingsSubtitleColorTarget::Outline,
+                SettingsSubtitleColorDragKind::SaturationValue,
+            ) => {
+                self.subtitle_color_picker_bounds.outline_sv = Some(bounds);
+            }
+            (SettingsSubtitleColorTarget::Outline, SettingsSubtitleColorDragKind::Hue) => {
+                self.subtitle_color_picker_bounds.outline_hue = Some(bounds);
+            }
+        }
+    }
+
+    fn subtitle_color_picker_bounds(
+        &self,
+        target: SettingsSubtitleColorTarget,
+        kind: SettingsSubtitleColorDragKind,
+    ) -> Option<Bounds<Pixels>> {
+        match (target, kind) {
+            (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::SaturationValue) => {
+                self.subtitle_color_picker_bounds.font_sv
+            }
+            (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::Hue) => {
+                self.subtitle_color_picker_bounds.font_hue
+            }
+            (
+                SettingsSubtitleColorTarget::Outline,
+                SettingsSubtitleColorDragKind::SaturationValue,
+            ) => self.subtitle_color_picker_bounds.outline_sv,
+            (SettingsSubtitleColorTarget::Outline, SettingsSubtitleColorDragKind::Hue) => {
+                self.subtitle_color_picker_bounds.outline_hue
+            }
+        }
+    }
+
+    fn commit_subtitle_color_at_position(
+        &mut self,
+        target: SettingsSubtitleColorTarget,
+        kind: SettingsSubtitleColorDragKind,
+        position: Point<Pixels>,
+    ) -> bool {
+        let Some(bounds) = self.subtitle_color_picker_bounds(target, kind) else {
+            return false;
+        };
+        let hsv = match kind {
+            SettingsSubtitleColorDragKind::SaturationValue => {
+                subtitle_hsv_from_sv_bounds(position, bounds, self, target)
+            }
+            SettingsSubtitleColorDragKind::Hue => {
+                subtitle_hsv_from_hue_bounds(position, bounds, self, target)
+            }
+        };
+        self.commit_subtitle_hsv_color(target, hsv)
     }
 }
 

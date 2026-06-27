@@ -64,6 +64,7 @@ impl FrameRoot {
             settings_subtitle_popover: None,
             subtitle_font_color_draft: DEFAULT_SUBTITLE_FONT_COLOR.to_uppercase(),
             subtitle_outline_color_draft: DEFAULT_SUBTITLE_OUTLINE_COLOR.to_uppercase(),
+            subtitle_color_picker_bounds: SettingsSubtitleColorPickerBounds::default(),
             preview_crop_file_id: None,
             preview_crop_mode: false,
             preview_draft_crop: None,
