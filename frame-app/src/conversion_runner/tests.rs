@@ -156,6 +156,23 @@ fn controller_tracks_registered_process_pid() {
 }
 
 #[test]
+fn controller_tracks_registered_process_start_time() {
+    let controller = ConversionProcessController::default();
+    let pid = std::process::id();
+
+    controller
+        .register_started_process("task-1", pid)
+        .expect("pid registration should succeed");
+
+    assert!(
+        controller
+            .active_start_time("task-1")
+            .is_some_and(|time| time > 0),
+        "registered process should keep a start-time guard"
+    );
+}
+
+#[test]
 fn controller_uses_shared_default_max_concurrency() {
     let controller = ConversionProcessController::default();
 

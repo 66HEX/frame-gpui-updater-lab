@@ -4,6 +4,7 @@ use std::{
 };
 
 use frame_core::{error::ConversionError, types::DEFAULT_MAX_CONCURRENCY};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 use super::process::{pause_process, resume_process, terminate_process};
 
@@ -22,6 +23,7 @@ struct ConversionProcessState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ActiveConversionProcess {
     pid: u32,
+    start_time: u64,
 }
 
 impl Default for ConversionProcessState {
@@ -53,10 +55,13 @@ impl ConversionProcessController {
 
     #[must_use]
     pub fn active_pid(&self, id: &str) -> Option<u32> {
-        self.state
-            .lock()
-            .ok()
-            .and_then(|state| state.active_processes.get(id).map(|process| process.pid))
+        self.active_process(id).map(|process| process.pid)
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(super) fn active_start_time(&self, id: &str) -> Option<u64> {
+        self.active_process(id).map(|process| process.start_time)
     }
 
     #[must_use]
@@ -67,11 +72,13 @@ impl ConversionProcessController {
     }
 
     pub fn register_started_process(&self, id: &str, pid: u32) -> Result<bool, ConversionError> {
+        let process = ActiveConversionProcess {
+            pid,
+            start_time: process_start_time(pid).unwrap_or(0),
+        };
         let was_cancelled = {
             let mut state = self.lock_state()?;
-            state
-                .active_processes
-                .insert(id.to_string(), ActiveConversionProcess { pid });
+            state.active_processes.insert(id.to_string(), process);
             state.cancelled_tasks.contains(id)
         };
 
@@ -89,33 +96,36 @@ impl ConversionProcessController {
     }
 
     pub fn cancel_task(&self, id: &str) -> Result<(), ConversionError> {
-        let pid = {
+        let process = {
             let mut state = self.lock_state()?;
             state.cancelled_tasks.insert(id.to_string());
-            state.active_processes.get(id).map(|process| process.pid)
+            state.active_processes.get(id).copied()
         };
 
-        if let Some(pid) = pid
-            && pid > 0
+        if let Some(process) = process
+            && process.pid > 0
         {
-            terminate_process(pid)?;
+            ensure_same_process(id, process)?;
+            terminate_process(process.pid)?;
         }
 
         Ok(())
     }
 
     pub fn pause_task(&self, id: &str) -> Result<(), ConversionError> {
-        let pid = self
-            .active_pid(id)
+        let process = self
+            .active_process(id)
             .ok_or_else(|| ConversionError::TaskNotFound(id.to_string()))?;
-        pause_process(pid)
+        ensure_same_process(id, process)?;
+        pause_process(process.pid)
     }
 
     pub fn resume_task(&self, id: &str) -> Result<(), ConversionError> {
-        let pid = self
-            .active_pid(id)
+        let process = self
+            .active_process(id)
             .ok_or_else(|| ConversionError::TaskNotFound(id.to_string()))?;
-        resume_process(pid)
+        ensure_same_process(id, process)?;
+        resume_process(process.pid)
     }
 
     pub fn take_cancelled(&self, id: &str) -> Result<bool, ConversionError> {
@@ -127,5 +137,75 @@ impl ConversionProcessController {
         self.state.lock().map_err(|error| {
             ConversionError::Worker(format!("process controller poisoned: {error}"))
         })
+    }
+
+    fn active_process(&self, id: &str) -> Option<ActiveConversionProcess> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.active_processes.get(id).copied())
+    }
+}
+
+fn process_start_time(pid: u32) -> Option<u64> {
+    if pid == 0 {
+        return None;
+    }
+
+    let target = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[target]));
+    system.process(target).map(|process| process.start_time())
+}
+
+fn ensure_same_process(id: &str, process: ActiveConversionProcess) -> Result<(), ConversionError> {
+    if process.start_time == 0 {
+        return Ok(());
+    }
+
+    let current_start = process_start_time(process.pid)
+        .ok_or_else(|| ConversionError::TaskNotFound(id.to_string()))?;
+
+    if current_start != process.start_time {
+        return Err(ConversionError::TaskNotFound(id.to_string()));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_same_process_accepts_current_process_identity() {
+        let pid = std::process::id();
+        let start_time =
+            process_start_time(pid).expect("current process start time should be readable");
+
+        let result = ensure_same_process("self", ActiveConversionProcess { pid, start_time });
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn ensure_same_process_rejects_mismatched_start_time() {
+        let pid = std::process::id();
+        let start_time =
+            process_start_time(pid).expect("current process start time should be readable");
+
+        let error = ensure_same_process(
+            "self",
+            ActiveConversionProcess {
+                pid,
+                start_time: start_time.saturating_add(1),
+            },
+        )
+        .expect_err("mismatched process identity should fail");
+
+        assert!(
+            error.to_string().contains("Task not found"),
+            "unexpected error: {error}"
+        );
     }
 }
