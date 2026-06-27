@@ -1,0 +1,19 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ureq = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints.rust]
+future-incompatible = "warn"
+nonstandard-style = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = 10 }
+redundant_clone = { level = "deny", priority = 9 }
+clone_on_copy = { level = "deny", priority = 9 }
+needless_collect = { level = "deny", priority = 8 }

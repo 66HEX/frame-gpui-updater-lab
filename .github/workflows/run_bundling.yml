@@ -1,0 +1,130 @@
+# Generated from xtask::workflows::run_bundling
+# Rebuild with `cargo xtask workflows`.
+name: run_bundling
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: '1'
+on:
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+jobs:
+  bundle_linux_x86_64:
+    if: |-
+      (github.event.action == 'labeled' && github.event.label.name == 'run-bundling') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-bundling'))
+    runs-on: ubuntu-22.04
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - name: steps::checkout_repo
+      uses: actions/checkout@v4
+    - name: steps::setup_rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: steps::setup_linux
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang libfontconfig1-dev libfreetype6-dev libx11-dev libxkbcommon-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev pkg-config
+    - name: ./script/bundle-linux
+      run: ./script/bundle-linux
+    - name: run_bundling::upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frame-linux-x86_64.tar.gz
+        path: target/release/frame-linux-x86_64.tar.gz
+        if-no-files-found: error
+    timeout-minutes: 60
+  bundle_linux_aarch64:
+    if: |-
+      (github.event.action == 'labeled' && github.event.label.name == 'run-bundling') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-bundling'))
+    runs-on: ubuntu-22.04-arm
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - name: steps::checkout_repo
+      uses: actions/checkout@v4
+    - name: steps::setup_rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: steps::setup_linux
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang libfontconfig1-dev libfreetype6-dev libx11-dev libxkbcommon-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev pkg-config
+    - name: ./script/bundle-linux
+      run: ./script/bundle-linux
+    - name: run_bundling::upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frame-linux-aarch64.tar.gz
+        path: target/release/frame-linux-aarch64.tar.gz
+        if-no-files-found: error
+    timeout-minutes: 60
+  bundle_macos_x86_64:
+    if: |-
+      (github.event.action == 'labeled' && github.event.label.name == 'run-bundling') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-bundling'))
+    runs-on: macos-15-intel
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - name: steps::checkout_repo
+      uses: actions/checkout@v4
+    - name: steps::setup_rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: steps::install_cargo_bundle
+      run: cargo install cargo-bundle --locked
+    - name: ./script/bundle-mac
+      run: ./script/bundle-mac x86_64-apple-darwin
+    - name: run_bundling::upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Frame-x86_64.dmg
+        path: target/x86_64-apple-darwin/release/Frame-x86_64.dmg
+        if-no-files-found: error
+    timeout-minutes: 60
+  bundle_macos_aarch64:
+    if: |-
+      (github.event.action == 'labeled' && github.event.label.name == 'run-bundling') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-bundling'))
+    runs-on: macos-15
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - name: steps::checkout_repo
+      uses: actions/checkout@v4
+    - name: steps::setup_rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: steps::install_cargo_bundle
+      run: cargo install cargo-bundle --locked
+    - name: ./script/bundle-mac
+      run: ./script/bundle-mac aarch64-apple-darwin
+    - name: run_bundling::upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Frame-aarch64.dmg
+        path: target/aarch64-apple-darwin/release/Frame-aarch64.dmg
+        if-no-files-found: error
+    timeout-minutes: 60
+  bundle_windows_x86_64:
+    if: |-
+      (github.event.action == 'labeled' && github.event.label.name == 'run-bundling') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-bundling'))
+    runs-on: windows-2022
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+    - name: steps::checkout_repo
+      uses: actions/checkout@v4
+    - name: steps::setup_rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: ./script/bundle-windows.ps1
+      shell: pwsh
+      run: ./script/bundle-windows.ps1 -Architecture x86_64
+    - name: run_bundling::upload_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Frame-x86_64.exe
+        path: target/Frame-x86_64.exe
+        if-no-files-found: error
+    timeout-minutes: 60

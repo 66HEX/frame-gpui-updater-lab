@@ -11,8 +11,9 @@ the current project structure, local setup, checks, and pull request standards.
   compatibility rules, filters, and validation.
 - **Native UI:** `frame-app` for the application shell, GPUI views, app state,
   dialogs, bundled assets, and runtime integration.
-- **Setup Scripts:** Node.js scripts for downloading local FFmpeg/FFprobe
-  binaries.
+- **Automation:** `cargo xtask` for checks, workflow generation, and native
+  package entrypoints.
+- **Scripts:** `script/` contains the xtask-called packaging entrypoints.
 
 ## Getting Started
 
@@ -21,8 +22,7 @@ the current project structure, local setup, checks, and pull request standards.
 To build and run Frame locally, you will need:
 
 1. **Rust:** [Install Rust](https://www.rust-lang.org/tools/install)
-2. **Node.js 18 or newer:** used by setup scripts.
-3. **Platform toolchain:** install the C/C++ build tools and native desktop
+2. **Platform toolchain:** install the C/C++ build tools and native desktop
    libraries required by Rust and GPUI-CE for your operating system.
 
 ### Local Setup
@@ -40,7 +40,7 @@ To build and run Frame locally, you will need:
    during local development. Download the platform-specific tools with:
 
    ```bash
-   node scripts/setup-ffmpeg.cjs
+   cargo xtask setup-ffmpeg
    ```
 
 3. **Run in development mode:**
@@ -58,10 +58,10 @@ To build and run Frame locally, you will need:
 5. **Build native packages when needed:**
 
    ```bash
-   cargo install cargo-bundle
-   scripts/bundle-macos
-   scripts/bundle-linux
-   node scripts/bundle-windows.cjs
+   cargo xtask workflows
+   cargo xtask bundle macos
+   cargo xtask bundle linux
+   cargo xtask bundle windows
    ```
 
    Windows app icons are embedded into the `.exe` by `frame-app/build.rs`
@@ -83,7 +83,10 @@ To build and run Frame locally, you will need:
   filters, media compatibility rules, and conversion event types.
 - `frame-core/media-rules.json`: source of truth for container, codec, stream,
   and pixel format compatibility.
-- `scripts/`: setup helpers for local runtime binaries.
+- `tooling/xtask/`: Rust automation entrypoint for checks, bundling, and
+  generated workflows.
+- `script/`: platform bundling entrypoints called by `xtask` and GitHub
+  Actions.
 - `docs/`: roadmap, backlog, architecture notes, and verification records.
 - `CHANGELOG.md`: product release history.
 
@@ -108,16 +111,7 @@ To build and run Frame locally, you will need:
 Before submitting a PR, run the relevant checks:
 
 ```bash
-cargo fmt --manifest-path frame-core/Cargo.toml --check
-cargo fmt --manifest-path frame-app/Cargo.toml --check
-cargo test --manifest-path frame-core/Cargo.toml
-cargo test --manifest-path frame-app/Cargo.toml
-cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
-cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
-node --check scripts/setup-ffmpeg.cjs
-node --check scripts/bundle-windows.cjs
-bash -n scripts/bundle-macos
-bash -n scripts/bundle-linux
+cargo xtask ci
 ```
 
 For UI changes, add or update focused GPUI tests where practical. Visual parity

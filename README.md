@@ -172,7 +172,6 @@ these steps.
 **1. Prerequisites**
 
 - **Rust:** [Install Rust](https://www.rust-lang.org/tools/install)
-- **Node.js 18 or newer:** required for the binary setup script.
 - **Platform toolchain:** a C/C++ build toolchain and native desktop libraries
   required by Rust and GPUI-CE on your operating system.
 
@@ -185,12 +184,13 @@ cd frame
 
 **3. Setup Runtime Binaries**
 
-Frame requires FFmpeg and FFprobe runtime binaries. The setup script downloads
-the platform-specific tools into `frame-app/resources/binaries/`, which is
-intentionally ignored by git:
+Frame requires FFmpeg and FFprobe runtime binaries. Release and development
+tasks download the platform-specific tools into
+`frame-app/resources/binaries/`, which is intentionally ignored by git. To
+prepare them manually:
 
 ```bash
-node scripts/setup-ffmpeg.cjs
+cargo xtask setup-ffmpeg
 ```
 
 **4. Run or Build**
@@ -207,23 +207,29 @@ node scripts/setup-ffmpeg.cjs
   cargo build --manifest-path frame-app/Cargo.toml --release
   ```
 
-- **macOS `.app` bundle:**
+- **Regenerate release workflows:**
+
+  ```bash
+  cargo xtask workflows
+  ```
+
+- **macOS DMG:**
 
   ```bash
   cargo install cargo-bundle
-  scripts/bundle-macos
+  cargo xtask bundle macos
   ```
 
 - **Linux tarball with `.desktop` metadata and hicolor icons:**
 
   ```bash
-  scripts/bundle-linux
+  cargo xtask bundle linux
   ```
 
-- **Windows zip package with bundled runtime binaries:**
+- **Windows installer:**
 
   ```powershell
-  node scripts/bundle-windows.cjs
+  cargo xtask bundle windows
   ```
 
   The release binary embeds the Frame `.ico` resource during the normal Cargo
@@ -252,16 +258,7 @@ node scripts/setup-ffmpeg.cjs
 Run the main checks before submitting changes:
 
 ```bash
-cargo fmt --manifest-path frame-core/Cargo.toml --check
-cargo fmt --manifest-path frame-app/Cargo.toml --check
-cargo test --manifest-path frame-core/Cargo.toml
-cargo test --manifest-path frame-app/Cargo.toml
-cargo clippy --manifest-path frame-core/Cargo.toml --all-targets -- -D warnings
-cargo clippy --manifest-path frame-app/Cargo.toml --all-targets -- -D warnings
-node --check scripts/setup-ffmpeg.cjs
-node --check scripts/bundle-windows.cjs
-bash -n scripts/bundle-macos
-bash -n scripts/bundle-linux
+cargo xtask ci
 ```
 
 ## Star History
