@@ -106,8 +106,8 @@ impl Element for FrameTextInputElement {
         let cursor_x = line.x_for_index(cursor_offset);
         let focused = self.focus_handle.is_focused(window);
         let show_cursor = focused
-            && root.active_text_input == Some(self.kind)
-            && root.text_input_cursor_visible
+            && root.text_input_ui.active == Some(self.kind)
+            && root.text_input_ui.cursor_visible
             && window.is_window_active()
             && selected_range.is_empty();
 
@@ -155,7 +155,7 @@ impl Element for FrameTextInputElement {
     ) {
         let focused = self.focus_handle.is_focused(window);
         let kind = self.kind;
-        let active = self.owner.read(cx).active_text_input == Some(kind);
+        let active = self.owner.read(cx).text_input_ui.active == Some(kind);
 
         if should_handle_text_input(self.disabled, focused, active) {
             window.handle_input(
@@ -166,8 +166,8 @@ impl Element for FrameTextInputElement {
         }
 
         self.owner.update(cx, |root, cx| {
-            if focused && root.active_text_input != Some(kind) {
-                root.active_text_input = Some(kind);
+            if focused && root.text_input_ui.active != Some(kind) {
+                root.text_input_ui.active = Some(kind);
                 root.start_text_input_cursor(cx);
             }
         });

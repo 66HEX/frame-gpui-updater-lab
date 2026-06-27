@@ -16,13 +16,20 @@ pub(in crate::app) fn frame_choice_button(
     selected: bool,
     enabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Secondary, selected, enabled);
-    let label = label.into();
+    frame_text_button(id, label, ButtonVariant::Secondary, selected, enabled).w_full()
+}
 
+pub(in crate::app) fn frame_text_button(
+    id: impl Into<String>,
+    label: impl Into<String>,
+    variant: ButtonVariant,
+    selected: bool,
+    enabled: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let colors = button_colors(variant, selected, enabled);
     div()
         .id(id.into())
         .h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
         .flex()
         .items_center()
         .justify_center()
@@ -46,7 +53,7 @@ pub(in crate::app) fn frame_choice_button(
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })
-        .child(label)
+        .child(label.into())
 }
 
 pub(in crate::app) fn frame_icon_button(
@@ -57,6 +64,7 @@ pub(in crate::app) fn frame_icon_button(
     size: f32,
     icon_size: f32,
 ) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
     let (background, hover_background, active_background, foreground, hover_foreground, opacity) =
         match (variant, enabled) {
             (FrameIconButtonVariant::Ghost, true) => (
@@ -110,7 +118,8 @@ pub(in crate::app) fn frame_icon_button(
         };
 
     div()
-        .id(id.into())
+        .id(id.clone())
+        .group(id.clone())
         .w(px(size))
         .h(px(size))
         .flex()
@@ -133,5 +142,11 @@ pub(in crate::app) fn frame_icon_button(
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })
-        .child(icon_svg(icon, icon_size, color(foreground)))
+        .child(icon_svg_with_hover(
+            icon,
+            icon_size,
+            color(foreground),
+            id,
+            color(hover_foreground),
+        ))
 }

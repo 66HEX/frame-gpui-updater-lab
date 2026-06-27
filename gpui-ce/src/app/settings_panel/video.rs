@@ -827,22 +827,7 @@ fn settings_video_checkbox_row(
     checked: bool,
     disabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .flex()
-        .items_start()
-        .gap_2()
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .when(!disabled, |this| this.cursor_pointer())
-        .child(frame_checkbox_indicator(checked, false, disabled))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(settings_field_label(label))
-                .child(settings_hint_text(hint)),
-        )
+    frame_checkbox_row(id, label, hint, checked, disabled)
 }
 
 fn resolution_label(resolution: &str) -> &'static str {

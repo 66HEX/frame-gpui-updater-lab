@@ -20,7 +20,7 @@ impl Render for FrameRoot {
             selected_file.map_or_else(ConversionConfig::default, |file| file.config.clone());
         let selected_output_name =
             selected_file.map_or_else(String::new, |file| file.output_name.clone());
-        if self.active_text_input.is_some() && self.focused_text_input_kind(window).is_none() {
+        if self.text_input_ui.active.is_some() && self.focused_text_input_kind(window).is_none() {
             self.stop_text_input_cursor();
         }
         self.sync_preview_crop_for_selection(
@@ -32,70 +32,39 @@ impl Render for FrameRoot {
         let content = div().flex_1().p(px(CONTENT_PADDING));
         let content = match state.active_view {
             ActiveView::Workspace => {
-                let output_name_focus = self
-                    .settings_output_name_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let audio_bitrate_focus = self
-                    .settings_audio_bitrate_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let video_width_focus = self
-                    .settings_video_width_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let video_height_focus = self
-                    .settings_video_height_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let video_bitrate_focus = self
-                    .settings_video_bitrate_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let gif_loop_focus = self
-                    .settings_gif_loop_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_title_focus = self
-                    .settings_metadata_title_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_artist_focus = self
-                    .settings_metadata_artist_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_album_focus = self
-                    .settings_metadata_album_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_genre_focus = self
-                    .settings_metadata_genre_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_date_focus = self
-                    .settings_metadata_date_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let metadata_comment_focus = self
-                    .settings_metadata_comment_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let preset_name_focus = self
-                    .settings_preset_name_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let subtitle_font_color_focus = self
-                    .settings_subtitle_font_color_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
-                let subtitle_outline_color_focus = self
-                    .settings_subtitle_outline_color_focus
-                    .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                    .clone();
+                let output_name_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::OutputName, cx);
+                let audio_bitrate_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::AudioBitrate, cx);
+                let video_width_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::VideoCustomWidth, cx);
+                let video_height_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::VideoCustomHeight, cx);
+                let video_bitrate_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::VideoBitrate, cx);
+                let gif_loop_focus = self.ensure_text_input_focus(FrameTextInputKind::GifLoop, cx);
+                let metadata_title_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataTitle, cx);
+                let metadata_artist_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataArtist, cx);
+                let metadata_album_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataAlbum, cx);
+                let metadata_genre_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataGenre, cx);
+                let metadata_date_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataDate, cx);
+                let metadata_comment_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::MetadataComment, cx);
+                let preset_name_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::PresetName, cx);
+                let subtitle_font_color_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::SubtitleFontColorHex, cx);
+                let subtitle_outline_color_focus =
+                    self.ensure_text_input_focus(FrameTextInputKind::SubtitleOutlineColorHex, cx);
                 content.child(workspace_view(
                     &self.file_queue,
                     SettingsRenderState {
-                        active_tab: self.settings_active_tab,
+                        active_tab: self.settings_ui.active_tab,
                         config: &selected_config_snapshot,
                         metadata: source_metadata.as_ref(),
                         metadata_status: source_metadata_entry.status,
@@ -120,15 +89,15 @@ impl Render for FrameRoot {
                             font: Some(&subtitle_font_color_focus),
                             outline: Some(&subtitle_outline_color_focus),
                         },
-                        subtitle_popover: self.settings_subtitle_popover,
-                        subtitle_font_color_draft: &self.subtitle_font_color_draft,
-                        subtitle_outline_color_draft: &self.subtitle_outline_color_draft,
-                        subtitle_font_color_hsv_draft: self.subtitle_font_color_hsv_draft,
-                        subtitle_outline_color_hsv_draft: self.subtitle_outline_color_hsv_draft,
-                        preset_name: &self.preset_name_draft,
+                        subtitle_popover: self.subtitle_ui.popover,
+                        subtitle_font_color_draft: &self.subtitle_ui.font_color_draft,
+                        subtitle_outline_color_draft: &self.subtitle_ui.outline_color_draft,
+                        subtitle_font_color_hsv_draft: self.subtitle_ui.font_color_hsv_draft,
+                        subtitle_outline_color_hsv_draft: self.subtitle_ui.outline_color_hsv_draft,
+                        preset_name: &self.settings_ui.preset_name_draft,
                         preset_name_focus: Some(&preset_name_focus),
                         presets: &self.presets,
-                        preset_notice: self.preset_notice.as_ref(),
+                        preset_notice: self.settings_ui.preset_notice.as_ref(),
                         subtitle_fonts: &self.subtitle_font_families,
                         available_encoders: &self.available_encoders,
                     },
@@ -160,7 +129,7 @@ impl Render for FrameRoot {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|root, _event: &MouseDownEvent, _window, cx| {
-                    if root.settings_subtitle_popover.is_some() {
+                    if root.subtitle_ui.popover.is_some() {
                         root.close_subtitle_popover();
                         cx.notify();
                     }
@@ -173,15 +142,12 @@ impl Render for FrameRoot {
             .child(titlebar(state, cx))
             .child(content);
 
-        if self.is_settings_open {
-            let value_focus = self
-                .app_settings_value_focus
-                .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
-                .clone();
+        if self.settings_ui.is_open {
+            let value_focus = self.ensure_text_input_focus(FrameTextInputKind::MaxConcurrency, cx);
             root = root.child(app_settings_sheet(
                 self.max_concurrency,
-                &self.max_concurrency_draft,
-                self.max_concurrency_error.as_deref(),
+                &self.settings_ui.max_concurrency_draft,
+                self.settings_ui.max_concurrency_error.as_deref(),
                 &value_focus,
                 window,
                 cx,

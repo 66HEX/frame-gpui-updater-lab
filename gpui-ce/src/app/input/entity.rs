@@ -8,7 +8,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
-        let kind = self.active_text_input?;
+        let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         let range = text_range_from_utf16(&text, &range_utf16);
         actual_range.replace(text_range_to_utf16(&text, &range));
@@ -21,7 +21,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        let kind = self.active_text_input?;
+        let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         let runtime = self.text_input_runtime(kind);
         Some(UTF16Selection {
@@ -35,7 +35,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<Range<usize>> {
-        let kind = self.active_text_input?;
+        let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         self.text_input_runtime(kind)
             .marked_range
@@ -44,7 +44,7 @@ impl EntityInputHandler for FrameRoot {
     }
 
     fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
-        if let Some(kind) = self.active_text_input {
+        if let Some(kind) = self.text_input_ui.active {
             self.text_input_runtime_mut(kind).marked_range = None;
         }
     }
@@ -56,7 +56,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(kind) = self.active_text_input else {
+        let Some(kind) = self.text_input_ui.active else {
             return;
         };
         if self.replace_text_input_range(kind, range_utf16, text, None, false) {
@@ -72,7 +72,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(kind) = self.active_text_input else {
+        let Some(kind) = self.text_input_ui.active else {
             return;
         };
         if self.replace_text_input_range(
@@ -93,7 +93,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        let kind = self.active_text_input?;
+        let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         let range = text_range_from_utf16(&text, &range_utf16);
         let line = self.text_input_runtime(kind).last_layout.as_ref()?;
@@ -113,7 +113,7 @@ impl EntityInputHandler for FrameRoot {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
-        let kind = self.active_text_input?;
+        let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         let runtime = self.text_input_runtime(kind);
         let bounds = runtime.last_bounds.as_ref()?;
@@ -123,7 +123,8 @@ impl EntityInputHandler for FrameRoot {
     }
 
     fn accepts_text_input(&self, _window: &mut Window, _cx: &mut Context<Self>) -> bool {
-        self.active_text_input
+        self.text_input_ui
+            .active
             .is_some_and(|kind| !self.text_input_disabled(kind))
     }
 }

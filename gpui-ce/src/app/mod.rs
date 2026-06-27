@@ -22,7 +22,7 @@ mod workspace;
 pub use runtime::{frame_window_options, init_app};
 
 use chrome::{app_settings_sheet, titlebar};
-use input::{FrameTextInputKind, FrameTextInputRuntime};
+use input::{FrameTextInputKind, FrameTextInputUiState};
 use logs_panel::logs_view;
 use preview_panel::{
     FlipAxis, PreviewCropRenderState, crop_aspect_id, crop_rect_from_settings, crop_rect_is_full,
@@ -174,69 +174,86 @@ pub struct FrameRoot {
     logs_scroll_handle: UniformListScrollHandle,
     last_log_scroll_target: Option<LogScrollTarget>,
     is_processing: bool,
-    is_settings_open: bool,
-    settings_active_tab: SettingsTab,
+    settings_ui: SettingsUiState,
     max_concurrency: usize,
-    max_concurrency_draft: String,
-    max_concurrency_error: Option<String>,
-    app_settings_value_focus: Option<FocusHandle>,
-    settings_output_name_focus: Option<FocusHandle>,
-    settings_audio_bitrate_focus: Option<FocusHandle>,
-    settings_video_width_focus: Option<FocusHandle>,
-    settings_video_height_focus: Option<FocusHandle>,
-    settings_video_bitrate_focus: Option<FocusHandle>,
-    settings_gif_loop_focus: Option<FocusHandle>,
-    settings_metadata_title_focus: Option<FocusHandle>,
-    settings_metadata_artist_focus: Option<FocusHandle>,
-    settings_metadata_album_focus: Option<FocusHandle>,
-    settings_metadata_genre_focus: Option<FocusHandle>,
-    settings_metadata_date_focus: Option<FocusHandle>,
-    settings_metadata_comment_focus: Option<FocusHandle>,
-    settings_preset_name_focus: Option<FocusHandle>,
-    settings_subtitle_font_color_focus: Option<FocusHandle>,
-    settings_subtitle_outline_color_focus: Option<FocusHandle>,
-    active_text_input: Option<FrameTextInputKind>,
-    max_concurrency_input: FrameTextInputRuntime,
-    output_name_input: FrameTextInputRuntime,
-    audio_bitrate_input: FrameTextInputRuntime,
-    video_width_input: FrameTextInputRuntime,
-    video_height_input: FrameTextInputRuntime,
-    video_bitrate_input: FrameTextInputRuntime,
-    gif_loop_input: FrameTextInputRuntime,
-    metadata_title_input: FrameTextInputRuntime,
-    metadata_artist_input: FrameTextInputRuntime,
-    metadata_album_input: FrameTextInputRuntime,
-    metadata_genre_input: FrameTextInputRuntime,
-    metadata_date_input: FrameTextInputRuntime,
-    metadata_comment_input: FrameTextInputRuntime,
-    preset_name_input: FrameTextInputRuntime,
-    subtitle_font_color_input: FrameTextInputRuntime,
-    subtitle_outline_color_input: FrameTextInputRuntime,
-    text_input_cursor_visible: bool,
-    text_input_cursor_paused: bool,
-    text_input_cursor_epoch: usize,
-    text_input_cursor_task: Task<()>,
+    text_input_ui: FrameTextInputUiState,
     source_metadata: SourceMetadataStore,
     conversion_processes: ConversionProcessController,
     available_encoders: AvailableEncoders,
     subtitle_font_families: Vec<String>,
     presets: Vec<PresetDefinition>,
+    subtitle_ui: SubtitleUiState,
+    preview_ui: PreviewUiState,
+    native_titlebar_controls_hidden: bool,
+    next_file_sequence: u64,
+}
+
+struct SettingsUiState {
+    is_open: bool,
+    active_tab: SettingsTab,
+    max_concurrency_draft: String,
+    max_concurrency_error: Option<String>,
     preset_name_draft: String,
     preset_notice: Option<PresetNotice>,
     next_custom_preset_sequence: u64,
-    settings_subtitle_popover: Option<SettingsSubtitlePopover>,
-    subtitle_font_color_draft: String,
-    subtitle_outline_color_draft: String,
-    subtitle_font_color_hsv_draft: SettingsSubtitleHsv,
-    subtitle_outline_color_hsv_draft: SettingsSubtitleHsv,
-    subtitle_color_picker_bounds: SettingsSubtitleColorPickerBounds,
-    preview_crop_file_id: Option<String>,
-    preview_crop_mode: bool,
-    preview_draft_crop: Option<CropRect>,
-    preview_crop_aspect: String,
-    preview_crop_drag: Option<PreviewCropDragState>,
-    native_titlebar_controls_hidden: bool,
-    next_file_sequence: u64,
+}
+
+impl Default for SettingsUiState {
+    fn default() -> Self {
+        Self {
+            is_open: false,
+            active_tab: SettingsTab::Source,
+            max_concurrency_draft: DEFAULT_MAX_CONCURRENCY.to_string(),
+            max_concurrency_error: None,
+            preset_name_draft: String::new(),
+            preset_notice: None,
+            next_custom_preset_sequence: 0,
+        }
+    }
+}
+
+struct SubtitleUiState {
+    popover: Option<SettingsSubtitlePopover>,
+    font_color_draft: String,
+    outline_color_draft: String,
+    font_color_hsv_draft: SettingsSubtitleHsv,
+    outline_color_hsv_draft: SettingsSubtitleHsv,
+    color_picker_bounds: SettingsSubtitleColorPickerBounds,
+}
+
+impl Default for SubtitleUiState {
+    fn default() -> Self {
+        Self {
+            popover: None,
+            font_color_draft: DEFAULT_SUBTITLE_FONT_COLOR.to_uppercase(),
+            outline_color_draft: DEFAULT_SUBTITLE_OUTLINE_COLOR.to_uppercase(),
+            font_color_hsv_draft: settings_panel::hex_to_subtitle_hsv(DEFAULT_SUBTITLE_FONT_COLOR),
+            outline_color_hsv_draft: settings_panel::hex_to_subtitle_hsv(
+                DEFAULT_SUBTITLE_OUTLINE_COLOR,
+            ),
+            color_picker_bounds: SettingsSubtitleColorPickerBounds::default(),
+        }
+    }
+}
+
+struct PreviewUiState {
+    crop_file_id: Option<String>,
+    crop_mode: bool,
+    draft_crop: Option<CropRect>,
+    crop_aspect: String,
+    crop_drag: Option<PreviewCropDragState>,
+}
+
+impl Default for PreviewUiState {
+    fn default() -> Self {
+        Self {
+            crop_file_id: None,
+            crop_mode: false,
+            draft_crop: None,
+            crop_aspect: "free".to_string(),
+            crop_drag: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

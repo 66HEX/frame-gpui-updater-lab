@@ -2,21 +2,23 @@ use super::*;
 
 impl FrameRoot {
     pub(super) fn open_app_settings(&mut self) {
-        self.is_settings_open = true;
-        self.max_concurrency_draft = self.max_concurrency.to_string();
-        self.max_concurrency_error = None;
+        self.settings_ui.is_open = true;
+        self.settings_ui.max_concurrency_draft = self.max_concurrency.to_string();
+        self.settings_ui.max_concurrency_error = None;
     }
     pub(super) fn close_app_settings(&mut self) {
-        self.is_settings_open = false;
-        self.max_concurrency_error = None;
-        self.app_settings_value_focus = None;
-        if self.active_text_input == Some(FrameTextInputKind::MaxConcurrency) {
+        self.settings_ui.is_open = false;
+        self.settings_ui.max_concurrency_error = None;
+        self.text_input_ui
+            .focuses
+            .clear(FrameTextInputKind::MaxConcurrency);
+        if self.text_input_ui.active == Some(FrameTextInputKind::MaxConcurrency) {
             self.stop_text_input_cursor();
         }
     }
     pub(super) fn apply_max_concurrency_draft(&mut self) -> bool {
         let Some(value) = self.parsed_max_concurrency_draft() else {
-            self.max_concurrency_error =
+            self.settings_ui.max_concurrency_error =
                 Some("Enter a whole number greater than zero.".to_string());
             return false;
         };
@@ -24,18 +26,18 @@ impl FrameRoot {
         match self.conversion_processes.update_max_concurrency(value) {
             Ok(()) => {
                 self.max_concurrency = value;
-                self.max_concurrency_draft = value.to_string();
-                self.max_concurrency_error = None;
+                self.settings_ui.max_concurrency_draft = value.to_string();
+                self.settings_ui.max_concurrency_error = None;
                 true
             }
             Err(error) => {
-                self.max_concurrency_error = Some(error.to_string());
+                self.settings_ui.max_concurrency_error = Some(error.to_string());
                 false
             }
         }
     }
     pub(super) fn parsed_max_concurrency_draft(&self) -> Option<usize> {
-        let trimmed = self.max_concurrency_draft.trim();
+        let trimmed = self.settings_ui.max_concurrency_draft.trim();
         let value = trimmed.parse::<usize>().ok()?;
         (value > 0).then_some(value)
     }
@@ -82,9 +84,9 @@ impl FrameRoot {
         if self.file_queue.selected_file_locked() {
             return false;
         }
-        let name = self.preset_name_draft.trim();
+        let name = self.settings_ui.preset_name_draft.trim();
         if name.is_empty() {
-            self.preset_notice = Some(PresetNotice {
+            self.settings_ui.preset_notice = Some(PresetNotice {
                 text: "Name required".to_string(),
                 tone: PresetNoticeTone::Error,
             });
@@ -92,18 +94,21 @@ impl FrameRoot {
         }
 
         let Some(config) = self.selected_config().cloned() else {
-            self.preset_notice = Some(PresetNotice {
+            self.settings_ui.preset_notice = Some(PresetNotice {
                 text: "Preset not saved".to_string(),
                 tone: PresetNoticeTone::Error,
             });
             return false;
         };
 
-        self.next_custom_preset_sequence += 1;
-        let id = format!("custom-preset-{}", self.next_custom_preset_sequence);
+        self.settings_ui.next_custom_preset_sequence += 1;
+        let id = format!(
+            "custom-preset-{}",
+            self.settings_ui.next_custom_preset_sequence
+        );
         self.presets.push(create_custom_preset(id, name, &config));
-        self.preset_name_draft.clear();
-        self.preset_notice = Some(PresetNotice {
+        self.settings_ui.preset_name_draft.clear();
+        self.settings_ui.preset_notice = Some(PresetNotice {
             text: "Preset saved".to_string(),
             tone: PresetNoticeTone::Success,
         });
@@ -116,7 +121,7 @@ impl FrameRoot {
             .iter()
             .position(|preset| preset.id == preset_id && !preset.built_in)
         else {
-            self.preset_notice = Some(PresetNotice {
+            self.settings_ui.preset_notice = Some(PresetNotice {
                 text: "Unable to delete".to_string(),
                 tone: PresetNoticeTone::Error,
             });
@@ -124,7 +129,7 @@ impl FrameRoot {
         };
 
         self.presets.remove(index);
-        self.preset_notice = Some(PresetNotice {
+        self.settings_ui.preset_notice = Some(PresetNotice {
             text: "Preset removed".to_string(),
             tone: PresetNoticeTone::Success,
         });
@@ -150,7 +155,7 @@ impl FrameRoot {
         let changed =
             self.update_selected_config(|config| apply_preset(config, &preset, metadata.as_ref()));
         if changed {
-            self.preset_notice = Some(PresetNotice {
+            self.settings_ui.preset_notice = Some(PresetNotice {
                 text: format!("Applied {}", preset.name),
                 tone: PresetNoticeTone::Success,
             });
@@ -222,7 +227,7 @@ impl FrameRoot {
         }
 
         if changed {
-            self.preset_notice = Some(PresetNotice {
+            self.settings_ui.preset_notice = Some(PresetNotice {
                 text: "Applied to all items".to_string(),
                 tone: PresetNoticeTone::Success,
             });

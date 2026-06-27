@@ -143,7 +143,7 @@ mod frame_root_conversion {
     #[test]
     fn apply_max_concurrency_draft_updates_live_controller_limit() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "4".to_string();
+        root.settings_ui.max_concurrency_draft = "4".to_string();
 
         assert!(root.apply_max_concurrency_draft());
 
@@ -159,19 +159,20 @@ mod frame_root_conversion {
     #[test]
     fn apply_max_concurrency_draft_rejects_zero() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "0".to_string();
+        root.settings_ui.max_concurrency_draft = "0".to_string();
 
         assert!(!root.apply_max_concurrency_draft());
 
         assert_eq!(root.max_concurrency, DEFAULT_MAX_CONCURRENCY);
-        assert!(root.max_concurrency_error.is_some());
+        assert!(root.settings_ui.max_concurrency_error.is_some());
     }
 
     #[test]
     fn max_concurrency_input_inserts_digits_at_selection() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "12".to_string();
-        root.max_concurrency_input.selected_range = 1..1;
+        root.settings_ui.max_concurrency_draft = "12".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::MaxConcurrency)
+            .selected_range = 1..1;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::MaxConcurrency,
@@ -181,15 +182,20 @@ mod frame_root_conversion {
             false,
         ));
 
-        assert_eq!(root.max_concurrency_draft, "192");
-        assert_eq!(root.max_concurrency_input.selected_range, 2..2);
+        assert_eq!(root.settings_ui.max_concurrency_draft, "192");
+        assert_eq!(
+            root.text_input_runtime(FrameTextInputKind::MaxConcurrency)
+                .selected_range,
+            2..2
+        );
     }
 
     #[test]
     fn max_concurrency_input_deletes_selected_range() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "12".to_string();
-        root.max_concurrency_input.selected_range = 1..2;
+        root.settings_ui.max_concurrency_draft = "12".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::MaxConcurrency)
+            .selected_range = 1..2;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::MaxConcurrency,
@@ -199,14 +205,18 @@ mod frame_root_conversion {
             false,
         ));
 
-        assert_eq!(root.max_concurrency_draft, "1");
-        assert_eq!(root.max_concurrency_input.selected_range, 1..1);
+        assert_eq!(root.settings_ui.max_concurrency_draft, "1");
+        assert_eq!(
+            root.text_input_runtime(FrameTextInputKind::MaxConcurrency)
+                .selected_range,
+            1..1
+        );
     }
 
     #[test]
     fn max_concurrency_apply_updates_live_controller_limit() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "4".to_string();
+        root.settings_ui.max_concurrency_draft = "4".to_string();
 
         assert!(root.apply_max_concurrency_draft());
 
@@ -228,7 +238,8 @@ mod frame_root_conversion {
             .file_queue
             .selected_file()
             .map_or(0, |file| file.output_name.len());
-        root.output_name_input.selected_range = len..len;
+        root.text_input_runtime_mut(FrameTextInputKind::OutputName)
+            .selected_range = len..len;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::OutputName,
@@ -252,7 +263,8 @@ mod frame_root_conversion {
         root.file_queue
             .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
         root.file_queue.update_selected_output_name("a");
-        root.output_name_input.selected_range = 0..1;
+        root.text_input_runtime_mut(FrameTextInputKind::OutputName)
+            .selected_range = 0..1;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::OutputName,
@@ -281,7 +293,8 @@ mod frame_root_conversion {
             .config
             .metadata
             .title = Some("Render".to_string());
-        root.metadata_title_input.selected_range = 6..6;
+        root.text_input_runtime_mut(FrameTextInputKind::MetadataTitle)
+            .selected_range = 6..6;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::MetadataTitle,
@@ -304,8 +317,9 @@ mod frame_root_conversion {
         let mut root = FrameRoot::new();
         root.file_queue
             .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
-        root.preset_name_draft = "Review".to_string();
-        root.preset_name_input.selected_range = 6..6;
+        root.settings_ui.preset_name_draft = "Review".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::PresetName)
+            .selected_range = 6..6;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::PresetName,
@@ -315,7 +329,7 @@ mod frame_root_conversion {
             false,
         ));
 
-        assert_eq!(root.preset_name_draft, "Review MP4");
+        assert_eq!(root.settings_ui.preset_name_draft, "Review MP4");
     }
 
     #[test]
@@ -323,8 +337,9 @@ mod frame_root_conversion {
         let mut root = FrameRoot::new();
         root.file_queue
             .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
-        root.subtitle_font_color_draft = "#".to_string();
-        root.subtitle_font_color_input.selected_range = 1..1;
+        root.subtitle_ui.font_color_draft = "#".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::SubtitleFontColorHex)
+            .selected_range = 1..1;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::SubtitleFontColorHex,
@@ -334,7 +349,7 @@ mod frame_root_conversion {
             false,
         ));
 
-        assert_eq!(root.subtitle_font_color_draft, "#AABBCC");
+        assert_eq!(root.subtitle_ui.font_color_draft, "#AABBCC");
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -348,8 +363,9 @@ mod frame_root_conversion {
         let mut root = FrameRoot::new();
         root.file_queue
             .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
-        root.subtitle_outline_color_draft = "#".to_string();
-        root.subtitle_outline_color_input.selected_range = 1..1;
+        root.subtitle_ui.outline_color_draft = "#".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::SubtitleOutlineColorHex)
+            .selected_range = 1..1;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::SubtitleOutlineColorHex,
@@ -359,7 +375,7 @@ mod frame_root_conversion {
             false,
         ));
 
-        assert_eq!(root.subtitle_outline_color_draft, "#F");
+        assert_eq!(root.subtitle_ui.outline_color_draft, "#F");
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -383,7 +399,7 @@ mod frame_root_conversion {
             },
         ));
 
-        assert_eq!(root.subtitle_font_color_draft, "#FFFF00");
+        assert_eq!(root.subtitle_ui.font_color_draft, "#FFFF00");
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -409,7 +425,7 @@ mod frame_root_conversion {
             point(px(10.0), px(20.0)),
         ));
 
-        assert_eq!(root.subtitle_font_color_draft, "#FFFFFF");
+        assert_eq!(root.subtitle_ui.font_color_draft, "#FFFFFF");
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -439,9 +455,9 @@ mod frame_root_conversion {
         };
 
         assert!(root.commit_subtitle_color_drag_at_position(drag, point(px(10.0), px(20.0))));
-        assert_eq!(root.subtitle_font_color_draft, "#FFFFFF");
+        assert_eq!(root.subtitle_ui.font_color_draft, "#FFFFFF");
         assert_eq!(
-            root.subtitle_font_color_hsv_draft,
+            root.subtitle_ui.font_color_hsv_draft,
             SettingsSubtitleHsv {
                 h: 270.0,
                 s: 0.0,
@@ -450,8 +466,8 @@ mod frame_root_conversion {
         );
         assert!(root.commit_subtitle_color_drag_at_position(drag, point(px(110.0), px(20.0))));
 
-        assert_eq!(root.subtitle_font_color_draft, "#8000FF");
-        assert_eq!(root.subtitle_font_color_hsv_draft.h, 270.0);
+        assert_eq!(root.subtitle_ui.font_color_draft, "#8000FF");
+        assert_eq!(root.subtitle_ui.font_color_hsv_draft.h, 270.0);
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -466,18 +482,18 @@ mod frame_root_conversion {
 
         root.toggle_subtitle_popover(SettingsSubtitlePopover::FontName);
         assert_eq!(
-            root.settings_subtitle_popover,
+            root.subtitle_ui.popover,
             Some(SettingsSubtitlePopover::FontName)
         );
 
         root.toggle_subtitle_popover(SettingsSubtitlePopover::FontSize);
         assert_eq!(
-            root.settings_subtitle_popover,
+            root.subtitle_ui.popover,
             Some(SettingsSubtitlePopover::FontSize)
         );
 
         root.toggle_subtitle_popover(SettingsSubtitlePopover::FontSize);
-        assert_eq!(root.settings_subtitle_popover, None);
+        assert_eq!(root.subtitle_ui.popover, None);
     }
 
     #[test]
@@ -485,7 +501,7 @@ mod frame_root_conversion {
         let mut root = FrameRoot::new();
         root.file_queue
             .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
-        root.preset_name_draft = "Review MP4".to_string();
+        root.settings_ui.preset_name_draft = "Review MP4".to_string();
 
         assert!(root.save_preset_from_draft());
 
@@ -494,7 +510,7 @@ mod frame_root_conversion {
                 .iter()
                 .any(|preset| preset.name == "Review MP4")
         );
-        assert!(root.preset_name_draft.is_empty());
+        assert!(root.settings_ui.preset_name_draft.is_empty());
     }
 
     #[test]
@@ -507,7 +523,8 @@ mod frame_root_conversion {
             .unwrap()
             .config
             .audio_bitrate = "12".to_string();
-        root.audio_bitrate_input.selected_range = 1..1;
+        root.text_input_runtime_mut(FrameTextInputKind::AudioBitrate)
+            .selected_range = 1..1;
 
         assert!(root.replace_text_input_range(
             FrameTextInputKind::AudioBitrate,
@@ -523,7 +540,11 @@ mod frame_root_conversion {
                 .map(|file| file.config.audio_bitrate.as_str()),
             Some("192")
         );
-        assert_eq!(root.audio_bitrate_input.selected_range, 2..2);
+        assert_eq!(
+            root.text_input_runtime(FrameTextInputKind::AudioBitrate)
+                .selected_range,
+            2..2
+        );
     }
 
     #[test]
@@ -536,7 +557,8 @@ mod frame_root_conversion {
             .unwrap()
             .config
             .audio_bitrate = "128".to_string();
-        root.audio_bitrate_input.selected_range = 3..3;
+        root.text_input_runtime_mut(FrameTextInputKind::AudioBitrate)
+            .selected_range = 3..3;
 
         assert!(!root.replace_text_input_range(
             FrameTextInputKind::AudioBitrate,
@@ -741,9 +763,9 @@ mod frame_root_config {
         let changed = root.toggle_selected_crop_mode();
 
         assert!(changed);
-        assert!(root.preview_crop_mode);
-        assert_eq!(root.preview_draft_crop, Some(default_crop_rect()));
-        assert_eq!(root.preview_crop_aspect, "free");
+        assert!(root.preview_ui.crop_mode);
+        assert_eq!(root.preview_ui.draft_crop, Some(default_crop_rect()));
+        assert_eq!(root.preview_ui.crop_aspect, "free");
     }
 
     #[test]
@@ -763,14 +785,14 @@ mod frame_root_config {
                 ..SourceMetadata::default()
             },
         );
-        root.preview_crop_mode = true;
-        root.preview_draft_crop = Some(CropRect {
+        root.preview_ui.crop_mode = true;
+        root.preview_ui.draft_crop = Some(CropRect {
             x: 0.25,
             y: 0.25,
             width: 0.5,
             height: 0.5,
         });
-        root.preview_crop_aspect = "16:9".to_string();
+        root.preview_ui.crop_aspect = "16:9".to_string();
 
         let changed = root.apply_selected_crop();
 
@@ -825,8 +847,8 @@ mod frame_root_config {
             });
             true
         });
-        root.preview_crop_mode = true;
-        root.preview_draft_crop = Some(full_crop_rect());
+        root.preview_ui.crop_mode = true;
+        root.preview_ui.draft_crop = Some(full_crop_rect());
 
         let changed = root.apply_selected_crop();
 
@@ -877,8 +899,8 @@ mod frame_root_config {
                 ..SourceMetadata::default()
             },
         );
-        root.preview_crop_mode = true;
-        root.preview_draft_crop = Some(CropRect {
+        root.preview_ui.crop_mode = true;
+        root.preview_ui.draft_crop = Some(CropRect {
             x: 0.10,
             y: 0.10,
             width: 0.50,
@@ -890,7 +912,7 @@ mod frame_root_config {
         );
         assert!(root.apply_preview_crop_drag(DragHandle::Move, PreviewPoint { x: 0.60, y: 0.55 },));
 
-        let draft = root.preview_draft_crop.unwrap();
+        let draft = root.preview_ui.draft_crop.unwrap();
         assert!((draft.x - 0.20).abs() < 0.000_001);
         assert!((draft.y - 0.15).abs() < 0.000_001);
         assert_eq!(draft.width, 0.50);
@@ -939,8 +961,11 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::AppSettings));
 
-        assert!(root.is_settings_open);
-        assert_eq!(root.max_concurrency_draft, root.max_concurrency.to_string());
+        assert!(root.settings_ui.is_open);
+        assert_eq!(
+            root.settings_ui.max_concurrency_draft,
+            root.max_concurrency.to_string()
+        );
     }
 
     #[test]
@@ -969,9 +994,9 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::PreviewCrop));
 
-        assert!(root.preview_crop_mode);
-        assert!(root.preview_draft_crop.is_some());
-        assert_eq!(root.preview_crop_aspect, "1:1");
+        assert!(root.preview_ui.crop_mode);
+        assert!(root.preview_ui.draft_crop.is_some());
+        assert_eq!(root.preview_ui.crop_aspect, "1:1");
     }
 
     #[test]
@@ -980,7 +1005,7 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsMetadata));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Metadata);
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Metadata);
         assert_eq!(
             root.selected_source_metadata()
                 .and_then(|metadata| metadata.tags)
@@ -995,7 +1020,7 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsVideo));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Video);
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Video);
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -1010,7 +1035,7 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsImages));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Images);
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Images);
         assert_eq!(
             root.selected_source_metadata()
                 .map(|metadata| metadata.source_kind()),
@@ -1024,7 +1049,7 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsSubtitles));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Subtitles);
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Subtitles);
         assert_eq!(
             root.selected_source_metadata()
                 .map(|metadata| metadata.subtitle_tracks.len()),
@@ -1038,12 +1063,12 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsSubtitlesPopover));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Subtitles);
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Subtitles);
         assert_eq!(
-            root.settings_subtitle_popover,
+            root.subtitle_ui.popover,
             Some(SettingsSubtitlePopover::FontColor)
         );
-        assert_eq!(root.subtitle_font_color_draft, "#FFD166");
+        assert_eq!(root.subtitle_ui.font_color_draft, "#FFD166");
     }
 
     #[test]
@@ -1052,8 +1077,8 @@ mod visual_fixtures {
 
         root.apply_visual_fixture(Some(VisualFixture::SettingsPresets));
 
-        assert_eq!(root.settings_active_tab, SettingsTab::Presets);
-        assert_eq!(root.preset_name_draft, "Client Review MP4");
+        assert_eq!(root.settings_ui.active_tab, SettingsTab::Presets);
+        assert_eq!(root.settings_ui.preset_name_draft, "Client Review MP4");
         assert!(
             root.presets
                 .iter()
@@ -1359,8 +1384,9 @@ mod visual_contract {
     #[test]
     fn max_concurrency_runtime_settings_has_no_stepper_actions() {
         let mut root = FrameRoot::new();
-        root.max_concurrency_draft = "1".to_string();
-        root.max_concurrency_input.selected_range = 1..1;
+        root.settings_ui.max_concurrency_draft = "1".to_string();
+        root.text_input_runtime_mut(FrameTextInputKind::MaxConcurrency)
+            .selected_range = 1..1;
 
         assert!(!root.replace_text_input_range(
             FrameTextInputKind::MaxConcurrency,
@@ -1369,7 +1395,7 @@ mod visual_contract {
             None,
             false,
         ));
-        assert_eq!(root.max_concurrency_draft, "1");
+        assert_eq!(root.settings_ui.max_concurrency_draft, "1");
     }
 
     #[test]

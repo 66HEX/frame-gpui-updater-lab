@@ -69,19 +69,19 @@ impl FrameRoot {
     }
     pub(super) fn apply_preview_crop_fixture(&mut self) {
         self.apply_preview_ready_fixture();
-        self.preview_crop_file_id = Some("fixture-preview".to_string());
-        self.preview_crop_mode = true;
-        self.preview_draft_crop = Some(CropRect {
+        self.preview_ui.crop_file_id = Some("fixture-preview".to_string());
+        self.preview_ui.crop_mode = true;
+        self.preview_ui.draft_crop = Some(CropRect {
             x: 0.18,
             y: 0.16,
             width: 0.64,
             height: 0.64,
         });
-        self.preview_crop_aspect = "1:1".to_string();
+        self.preview_ui.crop_aspect = "1:1".to_string();
     }
     pub(super) fn apply_settings_video_fixture(&mut self) {
         self.apply_preview_ready_fixture();
-        self.settings_active_tab = SettingsTab::Video;
+        self.settings_ui.active_tab = SettingsTab::Video;
         if let Some(file) = self.file_queue.selected_file_mut() {
             file.config.resolution = "custom".to_string();
             file.config.custom_width = Some("1920".to_string());
@@ -115,11 +115,11 @@ impl FrameRoot {
             file.config.custom_width = Some("2048".to_string());
             file.config.custom_height = Some("1080".to_string());
         }
-        self.settings_active_tab = SettingsTab::Images;
+        self.settings_ui.active_tab = SettingsTab::Images;
     }
     pub(super) fn apply_settings_metadata_fixture(&mut self) {
         self.apply_preview_ready_fixture();
-        self.settings_active_tab = SettingsTab::Metadata;
+        self.settings_ui.active_tab = SettingsTab::Metadata;
         self.source_metadata.mark_ready(
             "fixture-preview".to_string(),
             SourceMetadata {
@@ -151,7 +151,7 @@ impl FrameRoot {
     }
     pub(super) fn apply_settings_subtitles_fixture(&mut self) {
         self.apply_preview_ready_fixture();
-        self.settings_active_tab = SettingsTab::Subtitles;
+        self.settings_ui.active_tab = SettingsTab::Subtitles;
         self.subtitle_font_families = vec![
             "Arial".to_string(),
             "Helvetica Neue".to_string(),
@@ -200,14 +200,14 @@ impl FrameRoot {
     }
     pub(super) fn apply_settings_subtitles_popover_fixture(&mut self) {
         self.apply_settings_subtitles_fixture();
-        self.settings_subtitle_popover = Some(SettingsSubtitlePopover::FontColor);
-        self.subtitle_font_color_draft = "#FFD166".to_string();
-        self.subtitle_font_color_hsv_draft = settings_panel::hex_to_subtitle_hsv("#ffd166");
+        self.subtitle_ui.popover = Some(SettingsSubtitlePopover::FontColor);
+        self.subtitle_ui.font_color_draft = "#FFD166".to_string();
+        self.subtitle_ui.font_color_hsv_draft = settings_panel::hex_to_subtitle_hsv("#ffd166");
     }
     pub(super) fn apply_settings_presets_fixture(&mut self) {
         self.apply_preview_ready_fixture();
-        self.settings_active_tab = SettingsTab::Presets;
-        self.preset_name_draft = "Client Review MP4".to_string();
+        self.settings_ui.active_tab = SettingsTab::Presets;
+        self.settings_ui.preset_name_draft = "Client Review MP4".to_string();
         self.presets.push(PresetDefinition::custom(
             "custom-review".to_string(),
             "Client Review MP4".to_string(),

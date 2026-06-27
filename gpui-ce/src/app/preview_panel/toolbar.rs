@@ -126,11 +126,11 @@ pub(in crate::app) fn preview_tool_button(
         ButtonVariant::Ghost
     };
     let colors = button_colors(variant, false, enabled);
-    let icon_color = color(colors.foreground);
     let button_id = format!("preview-tool-{}", icon.replace(['/', '.'], "-"));
 
     div()
-        .id(button_id)
+        .id(button_id.clone())
+        .group(button_id.clone())
         .w(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .h(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .flex()
@@ -142,7 +142,7 @@ pub(in crate::app) fn preview_tool_button(
         } else {
             color(theme::TRANSPARENT)
         })
-        .text_color(icon_color)
+        .text_color(color(colors.foreground))
         .opacity(colors.opacity)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
         .when(!enabled, |this| this.cursor_not_allowed())
@@ -155,7 +155,13 @@ pub(in crate::app) fn preview_tool_button(
             })
             .active(move |style| style.bg(color(colors.active_background)))
         })
-        .child(icon_svg(icon, PREVIEW_TOOLBAR_ICON_SIZE, icon_color))
+        .child(icon_svg_with_hover(
+            icon,
+            PREVIEW_TOOLBAR_ICON_SIZE,
+            color(colors.foreground),
+            button_id,
+            color(colors.hover_foreground),
+        ))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })

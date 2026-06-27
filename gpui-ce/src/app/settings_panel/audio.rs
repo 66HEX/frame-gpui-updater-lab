@@ -368,31 +368,22 @@ fn settings_audio_normalize_toggle(
     disabled: bool,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id("settings-audio-normalize-row")
-        .flex()
-        .items_start()
-        .gap_2()
-        .opacity(if disabled { 0.5 } else { 1.0 })
-        .when(!disabled, |this| this.cursor_pointer())
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if disabled {
-                return;
-            }
-            if root.update_selected_config(|config| apply_audio_normalize(config, !checked)) {
-                cx.notify();
-            }
-        }))
-        .child(frame_checkbox_indicator(checked, false, disabled))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(settings_field_label("NORMALIZE AUDIO"))
-                .child(settings_hint_text("Smooth out loudness differences.")),
-        )
+    frame_checkbox_row(
+        "settings-audio-normalize-row",
+        "NORMALIZE AUDIO",
+        "Smooth out loudness differences.",
+        checked,
+        disabled,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if disabled {
+            return;
+        }
+        if root.update_selected_config(|config| apply_audio_normalize(config, !checked)) {
+            cx.notify();
+        }
+    }))
 }
 
 pub(in crate::app) fn settings_audio_codec_list(
@@ -439,81 +430,25 @@ pub(in crate::app) fn settings_audio_track_button(
     option: crate::settings::AudioTrackOption,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(
-        ButtonVariant::Secondary,
-        option.is_selected,
-        !option.is_disabled,
-    );
     let index = option.index;
     let is_enabled = !option.is_disabled;
-    let is_selected = option.is_selected;
 
-    div()
-        .id(format!("audio-track-{index}"))
-        .min_h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .py(px(6.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(is_enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!is_enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(is_enabled, window, cx);
-        })
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if !is_enabled {
-                return;
-            }
-            if root.update_selected_config(|config| toggle_audio_track_selection(config, index)) {
-                cx.notify();
-            }
-        }))
-        .child(
-            div()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .text_color(color(theme::FRAME_GRAY_600))
-                                .child(option.index_label),
-                        )
-                        .child(
-                            div()
-                                .text_color(color(theme::FOREGROUND))
-                                .child(option.codec),
-                        ),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_color(color(theme::FRAME_GRAY_600))
-                        .child(option.detail),
-                ),
-        )
-        .child(frame_selection_dot(is_selected))
+    frame_track_list_item(
+        format!("audio-track-{index}"),
+        option.index_label,
+        option.codec,
+        option.detail,
+        option.is_selected,
+        is_enabled,
+        FrameTrackListItemLayout::Stacked,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if !is_enabled {
+            return;
+        }
+        if root.update_selected_config(|config| toggle_audio_track_selection(config, index)) {
+            cx.notify();
+        }
+    }))
 }

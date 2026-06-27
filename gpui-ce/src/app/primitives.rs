@@ -91,7 +91,6 @@ pub(super) fn action_button(
 ) -> gpui::Div {
     let is_icon_only = label.is_none();
     let colors = button_colors(variant, false, enabled);
-    let button_icon_color = color(colors.foreground);
 
     let button = div()
         .h(px(TITLEBAR_BUTTON_HEIGHT))
@@ -121,12 +120,12 @@ pub(super) fn action_button(
         button.w(px(TITLEBAR_ICON_BUTTON_SIZE)).child(icon_svg(
             icon,
             TITLEBAR_ACTION_ICON_SIZE,
-            button_icon_color,
+            color(colors.foreground),
         ))
     } else {
         button
             .px(px(10.0))
-            .child(icon_svg(icon, TITLEBAR_ICON_SIZE, button_icon_color))
+            .child(icon_svg(icon, TITLEBAR_ICON_SIZE, color(colors.foreground)))
             .child(label.unwrap_or_default())
     }
 }
@@ -137,6 +136,21 @@ pub(super) fn icon_svg(path: &'static str, size: f32, icon_color: Rgba) -> impl 
         .w(px(size))
         .h(px(size))
         .text_color(icon_color)
+}
+
+pub(super) fn icon_svg_with_hover(
+    path: &'static str,
+    size: f32,
+    icon_color: Rgba,
+    hover_group: impl Into<SharedString>,
+    hover_color: Rgba,
+) -> impl IntoElement {
+    svg()
+        .path(path)
+        .w(px(size))
+        .h(px(size))
+        .text_color(icon_color)
+        .group_hover(hover_group, move |style| style.text_color(hover_color))
 }
 
 pub(super) fn parse_hex(hex: &str) -> Rgba {

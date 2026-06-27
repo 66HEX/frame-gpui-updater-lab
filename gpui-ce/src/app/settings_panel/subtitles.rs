@@ -200,7 +200,7 @@ fn settings_subtitle_burn_button(
         .when(has_path, |this| this.pr(px(32.0)))
         .bg(color(colors.background))
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(theme::FOREGROUND))
+        .text_color(color(colors.foreground))
         .opacity(colors.opacity)
         .shadow(button_highlight_shadows())
         .when(!disabled, |this| {
@@ -488,6 +488,7 @@ fn settings_subtitle_select_trigger(
 
     div()
         .id(id)
+        .group(id)
         .h(px(SETTINGS_CONTROL_HEIGHT))
         .w_full()
         .flex()
@@ -528,10 +529,12 @@ fn settings_subtitle_select_trigger(
                 .text_color(color(theme::FOREGROUND))
                 .child(display.to_string()),
         )
-        .child(icon_svg(
+        .child(icon_svg_with_hover(
             assets::ICON_CHEVRONS_UP_DOWN,
             12.0,
-            color(theme::FOREGROUND),
+            color(colors.foreground),
+            id,
+            color(colors.hover_foreground),
         ))
 }
 
@@ -662,6 +665,7 @@ fn settings_subtitle_color_field(
         .child(
             div()
                 .id(id)
+                .group(id)
                 .h(px(SETTINGS_CONTROL_HEIGHT))
                 .w_full()
                 .flex()
@@ -672,6 +676,7 @@ fn settings_subtitle_color_field(
                 .px(px(10.0))
                 .bg(color(colors.background))
                 .text_size(px(theme::TEXT_LABEL_SIZE))
+                .text_color(color(colors.foreground))
                 .opacity(colors.opacity)
                 .shadow(button_highlight_shadows())
                 .when(enabled, |this| {
@@ -722,10 +727,12 @@ fn settings_subtitle_color_field(
                                 .child(value.to_uppercase()),
                         ),
                 )
-                .child(div().flex_shrink_0().child(icon_svg(
+                .child(div().flex_shrink_0().child(icon_svg_with_hover(
                     assets::ICON_CHEVRONS_UP_DOWN,
                     12.0,
-                    color(theme::FOREGROUND),
+                    color(colors.foreground),
+                    id,
+                    color(colors.hover_foreground),
                 ))),
         );
 
@@ -1011,7 +1018,7 @@ fn settings_subtitle_hue_segments() -> gpui::Div {
 
 impl FrameRoot {
     pub(in crate::app) fn toggle_subtitle_popover(&mut self, popover: SettingsSubtitlePopover) {
-        self.settings_subtitle_popover = if self.settings_subtitle_popover == Some(popover) {
+        self.subtitle_ui.popover = if self.subtitle_ui.popover == Some(popover) {
             None
         } else {
             Some(popover)
@@ -1019,9 +1026,9 @@ impl FrameRoot {
     }
 
     pub(in crate::app) fn close_subtitle_popover(&mut self) {
-        self.settings_subtitle_popover = None;
+        self.subtitle_ui.popover = None;
         if matches!(
-            self.active_text_input,
+            self.text_input_ui.active,
             Some(
                 FrameTextInputKind::SubtitleFontColorHex
                     | FrameTextInputKind::SubtitleOutlineColorHex
@@ -1037,7 +1044,7 @@ impl FrameRoot {
         target: SettingsSubtitleColorTarget,
         value: &str,
     ) {
-        self.settings_subtitle_popover = Some(popover);
+        self.subtitle_ui.popover = Some(popover);
         self.set_subtitle_color_hsv_draft(target, hex_to_subtitle_hsv(value));
         self.set_subtitle_color_draft(target, value.to_uppercase());
     }
@@ -1049,16 +1056,16 @@ impl FrameRoot {
     ) -> bool {
         match target {
             SettingsSubtitleColorTarget::Font => {
-                if self.subtitle_font_color_draft == value {
+                if self.subtitle_ui.font_color_draft == value {
                     return false;
                 }
-                self.subtitle_font_color_draft = value;
+                self.subtitle_ui.font_color_draft = value;
             }
             SettingsSubtitleColorTarget::Outline => {
-                if self.subtitle_outline_color_draft == value {
+                if self.subtitle_ui.outline_color_draft == value {
                     return false;
                 }
-                self.subtitle_outline_color_draft = value;
+                self.subtitle_ui.outline_color_draft = value;
             }
         }
         true
@@ -1071,16 +1078,16 @@ impl FrameRoot {
     ) -> bool {
         match target {
             SettingsSubtitleColorTarget::Font => {
-                if self.subtitle_font_color_hsv_draft == hsv {
+                if self.subtitle_ui.font_color_hsv_draft == hsv {
                     return false;
                 }
-                self.subtitle_font_color_hsv_draft = hsv;
+                self.subtitle_ui.font_color_hsv_draft = hsv;
             }
             SettingsSubtitleColorTarget::Outline => {
-                if self.subtitle_outline_color_hsv_draft == hsv {
+                if self.subtitle_ui.outline_color_hsv_draft == hsv {
                     return false;
                 }
-                self.subtitle_outline_color_hsv_draft = hsv;
+                self.subtitle_ui.outline_color_hsv_draft = hsv;
             }
         }
         true
@@ -1088,8 +1095,8 @@ impl FrameRoot {
 
     fn subtitle_color_hsv_draft(&self, target: SettingsSubtitleColorTarget) -> SettingsSubtitleHsv {
         match target {
-            SettingsSubtitleColorTarget::Font => self.subtitle_font_color_hsv_draft,
-            SettingsSubtitleColorTarget::Outline => self.subtitle_outline_color_hsv_draft,
+            SettingsSubtitleColorTarget::Font => self.subtitle_ui.font_color_hsv_draft,
+            SettingsSubtitleColorTarget::Outline => self.subtitle_ui.outline_color_hsv_draft,
         }
     }
 
@@ -1136,19 +1143,19 @@ impl FrameRoot {
     ) {
         match (target, kind) {
             (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::SaturationValue) => {
-                self.subtitle_color_picker_bounds.font_sv = Some(bounds);
+                self.subtitle_ui.color_picker_bounds.font_sv = Some(bounds);
             }
             (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::Hue) => {
-                self.subtitle_color_picker_bounds.font_hue = Some(bounds);
+                self.subtitle_ui.color_picker_bounds.font_hue = Some(bounds);
             }
             (
                 SettingsSubtitleColorTarget::Outline,
                 SettingsSubtitleColorDragKind::SaturationValue,
             ) => {
-                self.subtitle_color_picker_bounds.outline_sv = Some(bounds);
+                self.subtitle_ui.color_picker_bounds.outline_sv = Some(bounds);
             }
             (SettingsSubtitleColorTarget::Outline, SettingsSubtitleColorDragKind::Hue) => {
-                self.subtitle_color_picker_bounds.outline_hue = Some(bounds);
+                self.subtitle_ui.color_picker_bounds.outline_hue = Some(bounds);
             }
         }
     }
@@ -1160,17 +1167,17 @@ impl FrameRoot {
     ) -> Option<Bounds<Pixels>> {
         match (target, kind) {
             (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::SaturationValue) => {
-                self.subtitle_color_picker_bounds.font_sv
+                self.subtitle_ui.color_picker_bounds.font_sv
             }
             (SettingsSubtitleColorTarget::Font, SettingsSubtitleColorDragKind::Hue) => {
-                self.subtitle_color_picker_bounds.font_hue
+                self.subtitle_ui.color_picker_bounds.font_hue
             }
             (
                 SettingsSubtitleColorTarget::Outline,
                 SettingsSubtitleColorDragKind::SaturationValue,
-            ) => self.subtitle_color_picker_bounds.outline_sv,
+            ) => self.subtitle_ui.color_picker_bounds.outline_sv,
             (SettingsSubtitleColorTarget::Outline, SettingsSubtitleColorDragKind::Hue) => {
-                self.subtitle_color_picker_bounds.outline_hue
+                self.subtitle_ui.color_picker_bounds.outline_hue
             }
         }
     }
@@ -1352,79 +1359,31 @@ pub(in crate::app) fn settings_subtitle_track_button(
     option: crate::settings::SubtitleTrackOption,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(
-        ButtonVariant::Secondary,
-        option.is_selected,
-        !option.is_disabled,
-    );
     let index = option.index;
     let is_enabled = !option.is_disabled;
-    let is_selected = option.is_selected;
     let detail = option.detail;
+    let detail = if detail.is_empty() {
+        String::new()
+    } else {
+        format!("• {detail}")
+    };
 
-    div()
-        .id(format!("subtitle-track-{index}"))
-        .min_h(px(SETTINGS_CONTROL_HEIGHT))
-        .w_full()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_3()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .py(px(6.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(is_enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!is_enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(is_enabled, window, cx);
-        })
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if !is_enabled {
-                return;
-            }
-            if root.update_selected_config(|config| toggle_subtitle_track_selection(config, index))
-            {
-                cx.notify();
-            }
-        }))
-        .child(
-            div()
-                .min_w_0()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .text_color(color(theme::FRAME_GRAY_600))
-                        .child(option.index_label),
-                )
-                .child(
-                    div()
-                        .text_color(color(theme::FOREGROUND))
-                        .child(option.codec),
-                )
-                .when(!detail.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .truncate()
-                            .text_color(color(theme::FRAME_GRAY_600))
-                            .child(format!("• {detail}")),
-                    )
-                }),
-        )
-        .child(frame_selection_dot(is_selected))
+    frame_track_list_item(
+        format!("subtitle-track-{index}"),
+        option.index_label,
+        option.codec,
+        detail,
+        option.is_selected,
+        is_enabled,
+        FrameTrackListItemLayout::Inline,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if !is_enabled {
+            return;
+        }
+        if root.update_selected_config(|config| toggle_subtitle_track_selection(config, index)) {
+            cx.notify();
+        }
+    }))
 }

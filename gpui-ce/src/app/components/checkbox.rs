@@ -90,3 +90,46 @@ pub(in crate::app) fn frame_selection_dot(is_selected: bool) -> gpui::Div {
                 .opacity(if is_selected { 1.0 } else { 0.0 }),
         )
 }
+
+pub(in crate::app) fn frame_checkbox_row(
+    id: impl Into<String>,
+    label: impl Into<String>,
+    hint: impl Into<String>,
+    checked: bool,
+    disabled: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let label = label.into();
+    let hint = hint.into();
+    let enabled = !disabled;
+
+    div()
+        .id(id.into())
+        .flex()
+        .items_start()
+        .gap_2()
+        .opacity(if disabled { 0.5 } else { 1.0 })
+        .when(enabled, |this| this.cursor_pointer())
+        .when(!enabled, |this| this.cursor_not_allowed())
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(enabled, window, cx);
+        })
+        .child(frame_checkbox_indicator(checked, false, disabled))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(
+                    div()
+                        .text_size(px(theme::TEXT_LABEL_SIZE))
+                        .text_color(color(theme::FRAME_GRAY_600))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(theme::TEXT_LABEL_SIZE))
+                        .text_color(color(theme::FRAME_GRAY_600))
+                        .child(hint),
+                ),
+        )
+}

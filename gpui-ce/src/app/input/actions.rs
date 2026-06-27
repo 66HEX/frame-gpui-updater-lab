@@ -5,165 +5,43 @@ impl FrameRoot {
         &self,
         kind: FrameTextInputKind,
     ) -> &FrameTextInputRuntime {
-        match kind {
-            FrameTextInputKind::MaxConcurrency => &self.max_concurrency_input,
-            FrameTextInputKind::OutputName => &self.output_name_input,
-            FrameTextInputKind::AudioBitrate => &self.audio_bitrate_input,
-            FrameTextInputKind::VideoCustomWidth => &self.video_width_input,
-            FrameTextInputKind::VideoCustomHeight => &self.video_height_input,
-            FrameTextInputKind::VideoBitrate => &self.video_bitrate_input,
-            FrameTextInputKind::GifLoop => &self.gif_loop_input,
-            FrameTextInputKind::MetadataTitle => &self.metadata_title_input,
-            FrameTextInputKind::MetadataArtist => &self.metadata_artist_input,
-            FrameTextInputKind::MetadataAlbum => &self.metadata_album_input,
-            FrameTextInputKind::MetadataGenre => &self.metadata_genre_input,
-            FrameTextInputKind::MetadataDate => &self.metadata_date_input,
-            FrameTextInputKind::MetadataComment => &self.metadata_comment_input,
-            FrameTextInputKind::PresetName => &self.preset_name_input,
-            FrameTextInputKind::SubtitleFontColorHex => &self.subtitle_font_color_input,
-            FrameTextInputKind::SubtitleOutlineColorHex => &self.subtitle_outline_color_input,
-        }
+        self.text_input_ui.runtimes.runtime(kind)
     }
 
     pub(in crate::app) fn text_input_runtime_mut(
         &mut self,
         kind: FrameTextInputKind,
     ) -> &mut FrameTextInputRuntime {
-        match kind {
-            FrameTextInputKind::MaxConcurrency => &mut self.max_concurrency_input,
-            FrameTextInputKind::OutputName => &mut self.output_name_input,
-            FrameTextInputKind::AudioBitrate => &mut self.audio_bitrate_input,
-            FrameTextInputKind::VideoCustomWidth => &mut self.video_width_input,
-            FrameTextInputKind::VideoCustomHeight => &mut self.video_height_input,
-            FrameTextInputKind::VideoBitrate => &mut self.video_bitrate_input,
-            FrameTextInputKind::GifLoop => &mut self.gif_loop_input,
-            FrameTextInputKind::MetadataTitle => &mut self.metadata_title_input,
-            FrameTextInputKind::MetadataArtist => &mut self.metadata_artist_input,
-            FrameTextInputKind::MetadataAlbum => &mut self.metadata_album_input,
-            FrameTextInputKind::MetadataGenre => &mut self.metadata_genre_input,
-            FrameTextInputKind::MetadataDate => &mut self.metadata_date_input,
-            FrameTextInputKind::MetadataComment => &mut self.metadata_comment_input,
-            FrameTextInputKind::PresetName => &mut self.preset_name_input,
-            FrameTextInputKind::SubtitleFontColorHex => &mut self.subtitle_font_color_input,
-            FrameTextInputKind::SubtitleOutlineColorHex => &mut self.subtitle_outline_color_input,
-        }
+        self.text_input_ui.runtimes.runtime_mut(kind)
     }
 
     pub(in crate::app) fn text_input_focus_handle(
         &self,
         kind: FrameTextInputKind,
     ) -> Option<&FocusHandle> {
-        match kind {
-            FrameTextInputKind::MaxConcurrency => self.app_settings_value_focus.as_ref(),
-            FrameTextInputKind::OutputName => self.settings_output_name_focus.as_ref(),
-            FrameTextInputKind::AudioBitrate => self.settings_audio_bitrate_focus.as_ref(),
-            FrameTextInputKind::VideoCustomWidth => self.settings_video_width_focus.as_ref(),
-            FrameTextInputKind::VideoCustomHeight => self.settings_video_height_focus.as_ref(),
-            FrameTextInputKind::VideoBitrate => self.settings_video_bitrate_focus.as_ref(),
-            FrameTextInputKind::GifLoop => self.settings_gif_loop_focus.as_ref(),
-            FrameTextInputKind::MetadataTitle => self.settings_metadata_title_focus.as_ref(),
-            FrameTextInputKind::MetadataArtist => self.settings_metadata_artist_focus.as_ref(),
-            FrameTextInputKind::MetadataAlbum => self.settings_metadata_album_focus.as_ref(),
-            FrameTextInputKind::MetadataGenre => self.settings_metadata_genre_focus.as_ref(),
-            FrameTextInputKind::MetadataDate => self.settings_metadata_date_focus.as_ref(),
-            FrameTextInputKind::MetadataComment => self.settings_metadata_comment_focus.as_ref(),
-            FrameTextInputKind::PresetName => self.settings_preset_name_focus.as_ref(),
-            FrameTextInputKind::SubtitleFontColorHex => {
-                self.settings_subtitle_font_color_focus.as_ref()
-            }
-            FrameTextInputKind::SubtitleOutlineColorHex => {
-                self.settings_subtitle_outline_color_focus.as_ref()
-            }
-        }
+        self.text_input_ui.focuses.focus(kind)
+    }
+
+    pub(in crate::app) fn ensure_text_input_focus(
+        &mut self,
+        kind: FrameTextInputKind,
+        cx: &mut Context<Self>,
+    ) -> FocusHandle {
+        self.text_input_ui
+            .focuses
+            .focus_mut(kind)
+            .get_or_insert_with(|| cx.focus_handle().tab_stop(true))
+            .clone()
     }
 
     pub(in crate::app) fn focused_text_input_kind(
         &self,
         window: &Window,
     ) -> Option<FrameTextInputKind> {
-        if self
-            .text_input_focus_handle(FrameTextInputKind::MaxConcurrency)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MaxConcurrency)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::OutputName)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::OutputName)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::AudioBitrate)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::AudioBitrate)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::VideoCustomWidth)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::VideoCustomWidth)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::VideoCustomHeight)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::VideoCustomHeight)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::VideoBitrate)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::VideoBitrate)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::GifLoop)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::GifLoop)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataTitle)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataTitle)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataArtist)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataArtist)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataAlbum)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataAlbum)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataGenre)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataGenre)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataDate)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataDate)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::MetadataComment)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::MetadataComment)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::PresetName)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::PresetName)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::SubtitleFontColorHex)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::SubtitleFontColorHex)
-        } else if self
-            .text_input_focus_handle(FrameTextInputKind::SubtitleOutlineColorHex)
-            .is_some_and(|focus| focus.is_focused(window))
-        {
-            Some(FrameTextInputKind::SubtitleOutlineColorHex)
-        } else {
-            None
-        }
+        FrameTextInputKind::ALL.into_iter().find(|kind| {
+            self.text_input_focus_handle(*kind)
+                .is_some_and(|focus| focus.is_focused(window))
+        })
     }
 
     pub(in crate::app) fn active_text_input_kind(
@@ -171,7 +49,7 @@ impl FrameRoot {
         window: &Window,
     ) -> Option<FrameTextInputKind> {
         self.focused_text_input_kind(window)
-            .or(self.active_text_input)
+            .or(self.text_input_ui.active)
     }
 
     pub(in crate::app) fn text_input_disabled(&self, kind: FrameTextInputKind) -> bool {
@@ -197,7 +75,7 @@ impl FrameRoot {
 
     pub(in crate::app) fn text_input_value(&self, kind: FrameTextInputKind) -> String {
         match kind {
-            FrameTextInputKind::MaxConcurrency => self.max_concurrency_draft.clone(),
+            FrameTextInputKind::MaxConcurrency => self.settings_ui.max_concurrency_draft.clone(),
             FrameTextInputKind::OutputName => self
                 .file_queue
                 .selected_file()
@@ -238,10 +116,10 @@ impl FrameRoot {
                     })
                 })
                 .unwrap_or_default(),
-            FrameTextInputKind::PresetName => self.preset_name_draft.clone(),
-            FrameTextInputKind::SubtitleFontColorHex => self.subtitle_font_color_draft.clone(),
+            FrameTextInputKind::PresetName => self.settings_ui.preset_name_draft.clone(),
+            FrameTextInputKind::SubtitleFontColorHex => self.subtitle_ui.font_color_draft.clone(),
             FrameTextInputKind::SubtitleOutlineColorHex => {
-                self.subtitle_outline_color_draft.clone()
+                self.subtitle_ui.outline_color_draft.clone()
             }
         }
     }
@@ -254,9 +132,9 @@ impl FrameRoot {
         match kind {
             FrameTextInputKind::MaxConcurrency => {
                 let next = sanitize_number_input(candidate);
-                if self.max_concurrency_draft != next {
-                    self.max_concurrency_draft = next.clone();
-                    self.max_concurrency_error = None;
+                if self.settings_ui.max_concurrency_draft != next {
+                    self.settings_ui.max_concurrency_draft = next.clone();
+                    self.settings_ui.max_concurrency_error = None;
                 }
                 Some(next)
             }
@@ -338,8 +216,8 @@ impl FrameRoot {
                     return None;
                 }
                 let next: String = candidate.chars().filter(|ch| !ch.is_control()).collect();
-                self.preset_name_draft = next.clone();
-                self.preset_notice = None;
+                self.settings_ui.preset_name_draft = next.clone();
+                self.settings_ui.preset_notice = None;
                 Some(next)
             }
             FrameTextInputKind::SubtitleFontColorHex
@@ -400,7 +278,7 @@ impl FrameRoot {
         runtime.selected_range = offset..offset;
         runtime.selection_reversed = false;
         runtime.marked_range = None;
-        self.active_text_input = Some(kind);
+        self.text_input_ui.active = Some(kind);
         self.pause_text_input_cursor(cx);
     }
 
@@ -424,7 +302,7 @@ impl FrameRoot {
         }
         runtime.selected_range = clamp_text_range(&text, &runtime.selected_range);
         runtime.marked_range = None;
-        self.active_text_input = Some(kind);
+        self.text_input_ui.active = Some(kind);
         self.pause_text_input_cursor(cx);
     }
 
@@ -490,7 +368,7 @@ impl FrameRoot {
         runtime.selected_range = next_range;
         runtime.selection_reversed = false;
         runtime.marked_range = next_marked_range;
-        self.active_text_input = Some(kind);
+        self.text_input_ui.active = Some(kind);
         true
     }
 
@@ -534,7 +412,7 @@ impl FrameRoot {
         if let Some(focus) = self.text_input_focus_handle(kind) {
             focus.focus(window, cx);
         }
-        self.active_text_input = Some(kind);
+        self.text_input_ui.active = Some(kind);
         self.text_input_runtime_mut(kind).is_selecting = true;
         let offset = self.text_input_index_for_mouse_position(kind, event.position);
         if event.modifiers.shift {
@@ -778,33 +656,33 @@ impl FrameRoot {
     }
 
     pub(in crate::app) fn next_text_input_cursor_epoch(&mut self) -> usize {
-        self.text_input_cursor_epoch += 1;
-        self.text_input_cursor_epoch
+        self.text_input_ui.cursor_epoch += 1;
+        self.text_input_ui.cursor_epoch
     }
 
     pub(in crate::app) fn start_text_input_cursor(&mut self, cx: &mut Context<Self>) {
-        self.text_input_cursor_paused = false;
-        self.blink_text_input_cursor(self.text_input_cursor_epoch, cx);
+        self.text_input_ui.cursor_paused = false;
+        self.blink_text_input_cursor(self.text_input_ui.cursor_epoch, cx);
     }
 
     pub(in crate::app) fn stop_text_input_cursor(&mut self) {
-        self.active_text_input = None;
-        self.text_input_cursor_paused = false;
-        self.text_input_cursor_visible = false;
+        self.text_input_ui.active = None;
+        self.text_input_ui.cursor_paused = false;
+        self.text_input_ui.cursor_visible = false;
         self.next_text_input_cursor_epoch();
     }
 
     pub(in crate::app) fn pause_text_input_cursor(&mut self, cx: &mut Context<Self>) {
-        self.text_input_cursor_paused = true;
-        self.text_input_cursor_visible = true;
+        self.text_input_ui.cursor_paused = true;
+        self.text_input_ui.cursor_visible = true;
         cx.notify();
 
         let epoch = self.next_text_input_cursor_epoch();
-        self.text_input_cursor_task = cx.spawn(async move |this, cx| {
+        self.text_input_ui.cursor_task = cx.spawn(async move |this, cx| {
             cx.background_executor().timer(TEXT_INPUT_BLINK_PAUSE).await;
             if let Some(this) = this.upgrade() {
                 this.update(cx, |root, cx| {
-                    root.text_input_cursor_paused = false;
+                    root.text_input_ui.cursor_paused = false;
                     root.blink_text_input_cursor(epoch, cx);
                 });
             }
@@ -812,20 +690,20 @@ impl FrameRoot {
     }
 
     pub(in crate::app) fn blink_text_input_cursor(&mut self, epoch: usize, cx: &mut Context<Self>) {
-        if self.active_text_input.is_none() {
-            self.text_input_cursor_visible = false;
+        if self.text_input_ui.active.is_none() {
+            self.text_input_ui.cursor_visible = false;
             return;
         }
-        if self.text_input_cursor_paused || epoch != self.text_input_cursor_epoch {
-            self.text_input_cursor_visible = true;
+        if self.text_input_ui.cursor_paused || epoch != self.text_input_ui.cursor_epoch {
+            self.text_input_ui.cursor_visible = true;
             return;
         }
 
-        self.text_input_cursor_visible = !self.text_input_cursor_visible;
+        self.text_input_ui.cursor_visible = !self.text_input_ui.cursor_visible;
         cx.notify();
 
         let next_epoch = self.next_text_input_cursor_epoch();
-        self.text_input_cursor_task = cx.spawn(async move |this, cx| {
+        self.text_input_ui.cursor_task = cx.spawn(async move |this, cx| {
             cx.background_executor()
                 .timer(TEXT_INPUT_BLINK_INTERVAL)
                 .await;

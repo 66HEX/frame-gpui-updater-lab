@@ -1,3 +1,4 @@
+use super::components::frame_text_button;
 use super::input::{FrameTextInputSpec, frame_text_input};
 use super::primitives::*;
 use super::settings_panel::{settings_hint_text, settings_section};
@@ -37,7 +38,7 @@ pub(super) fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> imp
                     action_button(assets::ICON_SETTINGS, None, ButtonVariant::Secondary, true)
                         .id("titlebar-settings")
                         .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
-                            if root.is_settings_open {
+                            if root.settings_ui.is_open {
                                 root.close_app_settings();
                             } else {
                                 root.open_app_settings();
@@ -217,9 +218,11 @@ pub(super) fn app_settings_concurrency_control(
 
 pub(super) fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(ButtonVariant::Ghost, false, true);
+    let close_id = "app-settings-close";
 
     div()
-        .id("app-settings-close")
+        .id(close_id)
+        .group(close_id)
         .w(px(SETTINGS_CONTROL_HEIGHT))
         .h(px(SETTINGS_CONTROL_HEIGHT))
         .flex()
@@ -238,43 +241,23 @@ pub(super) fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
-        .child(icon_svg(
+        .child(icon_svg_with_hover(
             assets::ICON_CLOSE,
             FILE_LIST_ACTION_ICON_SIZE,
             color(colors.foreground),
+            close_id,
+            color(colors.hover_foreground),
         ))
 }
 
 pub(super) fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Secondary, false, enabled);
-
-    div()
-        .id("app-settings-max-concurrency-apply")
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .child("APPLY")
+    frame_text_button(
+        "app-settings-max-concurrency-apply",
+        "APPLY",
+        ButtonVariant::Secondary,
+        false,
+        enabled,
+    )
 }
 
 pub(super) fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
@@ -500,15 +483,12 @@ pub(super) fn titlebar_segment(
             }
             cx.stop_propagation();
         }))
-        .child(
-            svg()
-                .path(icon)
-                .w(px(TITLEBAR_ICON_SIZE))
-                .h(px(TITLEBAR_ICON_SIZE))
-                .text_color(icon_color)
-                .group_hover(segment_id, |style| {
-                    style.text_color(color(theme::FOREGROUND))
-                }),
-        )
+        .child(icon_svg_with_hover(
+            icon,
+            TITLEBAR_ICON_SIZE,
+            icon_color,
+            segment_id,
+            color(theme::FOREGROUND),
+        ))
         .child(label)
 }

@@ -47,6 +47,7 @@ pub(in crate::app) fn settings_tab_button(
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let colors = button_colors(ButtonVariant::Secondary, selected, true);
+    let tab_id = format!("settings-tab-{}", tab.id());
     let icon_color = if selected {
         color(theme::FOREGROUND)
     } else {
@@ -54,7 +55,8 @@ pub(in crate::app) fn settings_tab_button(
     };
 
     div()
-        .id(format!("settings-tab-{}", tab.id()))
+        .id(tab_id.clone())
+        .group(tab_id.clone())
         .w(px(SETTINGS_TAB_BUTTON_SIZE))
         .h(px(SETTINGS_TAB_BUTTON_SIZE))
         .flex()
@@ -66,6 +68,7 @@ pub(in crate::app) fn settings_tab_button(
         } else {
             color(theme::TRANSPARENT)
         })
+        .text_color(icon_color)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
         .hover(move |style| {
             style
@@ -74,6 +77,7 @@ pub(in crate::app) fn settings_tab_button(
                 } else {
                     theme::FRAME_GRAY_100
                 }))
+                .text_color(color(theme::FOREGROUND))
                 .cursor_pointer()
         })
         .active(move |style| style.bg(color(colors.active_background)))
@@ -81,14 +85,16 @@ pub(in crate::app) fn settings_tab_button(
             button_mouse_down(true, window, cx);
         })
         .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            root.settings_active_tab = tab;
+            root.settings_ui.active_tab = tab;
             cx.stop_propagation();
             cx.notify();
         }))
-        .child(icon_svg(
+        .child(icon_svg_with_hover(
             settings_tab_icon(tab),
             SETTINGS_TAB_ICON_SIZE,
             icon_color,
+            tab_id,
+            color(theme::FOREGROUND),
         ))
 }
 

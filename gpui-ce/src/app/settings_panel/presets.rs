@@ -93,41 +93,19 @@ fn settings_save_preset_button(
     enabled: bool,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Secondary, false, enabled);
-
-    div()
-        .id("settings-save-preset")
-        .h(px(SETTINGS_CONTROL_HEIGHT))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(theme::RADIUS_SM))
-        .px(px(10.0))
-        .bg(color(colors.background))
-        .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
-        .opacity(colors.opacity)
-        .shadow(button_highlight_shadows())
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
-        })
-        .when(!enabled, |this| this.cursor_not_allowed())
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            button_mouse_down(enabled, window, cx);
-        })
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if enabled && root.save_preset_from_draft() {
-                cx.notify();
-            }
-        }))
-        .child("Save")
+    frame_text_button(
+        "settings-save-preset",
+        "Save",
+        ButtonVariant::Secondary,
+        false,
+        enabled,
+    )
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if enabled && root.save_preset_from_draft() {
+            cx.notify();
+        }
+    }))
 }
 
 fn settings_preset_row(

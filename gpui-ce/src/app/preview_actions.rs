@@ -6,21 +6,21 @@ impl FrameRoot {
         selected_file_id: Option<&str>,
         selected_config: &ConversionConfig,
     ) {
-        if self.preview_crop_file_id.as_deref() != selected_file_id {
-            self.preview_crop_file_id = selected_file_id.map(str::to_string);
-            self.preview_crop_mode = false;
-            self.preview_draft_crop = None;
-            self.preview_crop_drag = None;
+        if self.preview_ui.crop_file_id.as_deref() != selected_file_id {
+            self.preview_ui.crop_file_id = selected_file_id.map(str::to_string);
+            self.preview_ui.crop_mode = false;
+            self.preview_ui.draft_crop = None;
+            self.preview_ui.crop_drag = None;
         }
 
-        if !self.preview_crop_mode {
-            self.preview_crop_aspect = selected_config
+        if !self.preview_ui.crop_mode {
+            self.preview_ui.crop_aspect = selected_config
                 .crop
                 .as_ref()
                 .and_then(|crop| crop.aspect_ratio.clone())
                 .unwrap_or_else(|| "free".to_string());
-            self.preview_draft_crop = None;
-            self.preview_crop_drag = None;
+            self.preview_ui.draft_crop = None;
+            self.preview_ui.crop_drag = None;
         }
     }
     pub(super) fn preview_crop_render_state(
@@ -29,10 +29,10 @@ impl FrameRoot {
         config: &ConversionConfig,
     ) -> PreviewCropRenderState {
         PreviewCropRenderState {
-            crop_mode: self.preview_crop_mode,
-            draft_crop: self.preview_draft_crop,
+            crop_mode: self.preview_ui.crop_mode,
+            draft_crop: self.preview_ui.draft_crop,
             applied_crop: crop_rect_from_settings(config.crop.as_ref(), config),
-            crop_aspect: self.preview_crop_aspect.clone(),
+            crop_aspect: self.preview_ui.crop_aspect.clone(),
             has_crop_dimensions: preview_crop_source_dimensions(metadata, &config.rotation)
                 .is_some(),
             rotation: config.rotation.clone(),
@@ -60,20 +60,20 @@ impl FrameRoot {
             .and_then(|crop| crop.aspect_ratio.clone())
             .unwrap_or_else(|| "free".to_string());
 
-        if self.preview_crop_mode {
-            self.preview_crop_mode = false;
-            self.preview_draft_crop = None;
-            self.preview_crop_drag = None;
+        if self.preview_ui.crop_mode {
+            self.preview_ui.crop_mode = false;
+            self.preview_ui.draft_crop = None;
+            self.preview_ui.crop_drag = None;
             return true;
         }
 
-        self.preview_crop_mode = true;
-        self.preview_draft_crop = Some(applied_crop.unwrap_or_else(default_crop_rect));
-        self.preview_crop_aspect = crop_aspect;
+        self.preview_ui.crop_mode = true;
+        self.preview_ui.draft_crop = Some(applied_crop.unwrap_or_else(default_crop_rect));
+        self.preview_ui.crop_aspect = crop_aspect;
         true
     }
     pub(super) fn select_preview_crop_aspect(&mut self, aspect_id: &str) -> bool {
-        if !self.preview_crop_mode || !is_known_crop_aspect(aspect_id) {
+        if !self.preview_ui.crop_mode || !is_known_crop_aspect(aspect_id) {
             return false;
         }
 
@@ -87,11 +87,11 @@ impl FrameRoot {
         };
         let is_side_rotation = is_side_rotation(&config.rotation);
 
-        let previous_aspect = self.preview_crop_aspect.clone();
-        let previous_rect = self.preview_draft_crop;
-        self.preview_crop_aspect = aspect_id.to_string();
-        if let Some(rect) = self.preview_draft_crop {
-            self.preview_draft_crop = Some(if let Some(ratio) = aspect_value(aspect_id) {
+        let previous_aspect = self.preview_ui.crop_aspect.clone();
+        let previous_rect = self.preview_ui.draft_crop;
+        self.preview_ui.crop_aspect = aspect_id.to_string();
+        if let Some(rect) = self.preview_ui.draft_crop {
+            self.preview_ui.draft_crop = Some(if let Some(ratio) = aspect_value(aspect_id) {
                 clamp_rect(adjust_rect_to_ratio(
                     rect,
                     ratio,
@@ -104,28 +104,30 @@ impl FrameRoot {
             });
         }
 
-        previous_aspect != self.preview_crop_aspect || previous_rect != self.preview_draft_crop
+        previous_aspect != self.preview_ui.crop_aspect
+            || previous_rect != self.preview_ui.draft_crop
     }
     pub(super) fn reset_preview_crop_selection(&mut self) -> bool {
-        if !self.preview_crop_mode {
+        if !self.preview_ui.crop_mode {
             return false;
         }
 
-        let previous_rect = self.preview_draft_crop;
-        let previous_aspect = self.preview_crop_aspect.clone();
-        self.preview_draft_crop = Some(if self.preview_draft_crop.is_some() {
+        let previous_rect = self.preview_ui.draft_crop;
+        let previous_aspect = self.preview_ui.crop_aspect.clone();
+        self.preview_ui.draft_crop = Some(if self.preview_ui.draft_crop.is_some() {
             full_crop_rect()
         } else {
             default_crop_rect()
         });
-        self.preview_crop_aspect = "free".to_string();
-        previous_rect != self.preview_draft_crop || previous_aspect != self.preview_crop_aspect
+        self.preview_ui.crop_aspect = "free".to_string();
+        previous_rect != self.preview_ui.draft_crop
+            || previous_aspect != self.preview_ui.crop_aspect
     }
     pub(super) fn apply_selected_crop(&mut self) -> bool {
-        if !self.preview_crop_mode {
+        if !self.preview_ui.crop_mode {
             return false;
         }
-        let Some(draft_crop) = self.preview_draft_crop else {
+        let Some(draft_crop) = self.preview_ui.draft_crop else {
             return false;
         };
 
@@ -142,7 +144,7 @@ impl FrameRoot {
         } else {
             crop_settings_from_rect(
                 draft_crop,
-                &self.preview_crop_aspect,
+                &self.preview_ui.crop_aspect,
                 &config.rotation,
                 config.flip_horizontal,
                 config.flip_vertical,
@@ -156,11 +158,11 @@ impl FrameRoot {
             config.crop = next_crop;
             changed
         });
-        self.preview_crop_mode = false;
-        self.preview_draft_crop = None;
-        self.preview_crop_drag = None;
+        self.preview_ui.crop_mode = false;
+        self.preview_ui.draft_crop = None;
+        self.preview_ui.crop_drag = None;
         if cleared_crop {
-            self.preview_crop_aspect = "free".to_string();
+            self.preview_ui.crop_aspect = "free".to_string();
         }
         changed
     }
@@ -257,10 +259,10 @@ impl FrameRoot {
         handle: DragHandle,
         point: PreviewPoint,
     ) -> bool {
-        if !self.preview_crop_mode {
+        if !self.preview_ui.crop_mode {
             return false;
         }
-        let Some(current_rect) = self.preview_draft_crop else {
+        let Some(current_rect) = self.preview_ui.draft_crop else {
             return false;
         };
 
@@ -274,7 +276,7 @@ impl FrameRoot {
         };
         let is_side_rotation = is_side_rotation(&config.rotation);
 
-        let drag_state = match self.preview_crop_drag {
+        let drag_state = match self.preview_ui.crop_drag {
             Some(state) if state.handle == handle => state,
             _ => {
                 let state = PreviewCropDragState {
@@ -282,7 +284,7 @@ impl FrameRoot {
                     start_rect: current_rect,
                     start_point: point,
                 };
-                self.preview_crop_drag = Some(state);
+                self.preview_ui.crop_drag = Some(state);
                 state
             }
         };
@@ -292,18 +294,18 @@ impl FrameRoot {
             handle,
             start_point: drag_state.start_point,
             current_point: point,
-            aspect_id: &self.preview_crop_aspect,
+            aspect_id: &self.preview_ui.crop_aspect,
             source_width: f64::from(dimensions.width),
             source_height: f64::from(dimensions.height),
             is_side_rotation,
         });
-        let changed = self.preview_draft_crop != Some(next_rect);
-        self.preview_draft_crop = Some(next_rect);
+        let changed = self.preview_ui.draft_crop != Some(next_rect);
+        self.preview_ui.draft_crop = Some(next_rect);
         changed
     }
     pub(super) fn end_preview_crop_drag(&mut self) -> bool {
-        let had_drag = self.preview_crop_drag.is_some();
-        self.preview_crop_drag = None;
+        let had_drag = self.preview_ui.crop_drag.is_some();
+        self.preview_ui.crop_drag = None;
         had_drag
     }
     pub(super) fn apply_selected_trim_drag(
@@ -362,8 +364,8 @@ impl FrameRoot {
         let next_tab = self
             .selected_config()
             .map_or(SettingsTab::Source, |config| {
-                resolve_active_settings_tab(self.settings_active_tab, config, metadata)
+                resolve_active_settings_tab(self.settings_ui.active_tab, config, metadata)
             });
-        self.settings_active_tab = next_tab;
+        self.settings_ui.active_tab = next_tab;
     }
 }
