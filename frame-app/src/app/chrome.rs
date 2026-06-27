@@ -106,6 +106,7 @@ pub(super) fn app_settings_sheet(
                 .inset_0()
                 .bg(color(theme::BACKGROUND.with_alpha(0.60)))
                 .backdrop_blur(px(4.0))
+                .occlude()
                 .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                     cx.stop_propagation();
                     root.close_app_settings();
@@ -125,6 +126,7 @@ pub(super) fn app_settings_sheet(
                 .rounded(px(theme::RADIUS_LG))
                 .bg(color(theme::SIDEBAR))
                 .shadow(card_surface_shadows())
+                .occlude()
                 .on_click(cx.listener(|_, _: &ClickEvent, _window, cx| {
                     cx.stop_propagation();
                 }))
