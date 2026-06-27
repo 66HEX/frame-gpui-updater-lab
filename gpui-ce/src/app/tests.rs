@@ -439,9 +439,19 @@ mod frame_root_conversion {
         };
 
         assert!(root.commit_subtitle_color_drag_at_position(drag, point(px(10.0), px(20.0))));
+        assert_eq!(root.subtitle_font_color_draft, "#FFFFFF");
+        assert_eq!(
+            root.subtitle_font_color_hsv_draft,
+            SettingsSubtitleHsv {
+                h: 270.0,
+                s: 0.0,
+                v: 1.0,
+            }
+        );
         assert!(root.commit_subtitle_color_drag_at_position(drag, point(px(110.0), px(20.0))));
 
         assert_eq!(root.subtitle_font_color_draft, "#8000FF");
+        assert_eq!(root.subtitle_font_color_hsv_draft.h, 270.0);
         assert_eq!(
             root.file_queue
                 .selected_file()
@@ -1151,6 +1161,8 @@ mod preview_shell {
             subtitle_popover: None,
             subtitle_font_color_draft: "",
             subtitle_outline_color_draft: "",
+            subtitle_font_color_hsv_draft: hex_to_subtitle_hsv(DEFAULT_SUBTITLE_FONT_COLOR),
+            subtitle_outline_color_hsv_draft: hex_to_subtitle_hsv(DEFAULT_SUBTITLE_OUTLINE_COLOR),
             preset_name: "",
             preset_name_focus: None,
             presets: &[],

@@ -95,6 +95,8 @@ pub(in crate::app) struct SettingsSubtitlesTabState<'a> {
     pub(in crate::app) active_popover: Option<SettingsSubtitlePopover>,
     pub(in crate::app) font_color_draft: &'a str,
     pub(in crate::app) outline_color_draft: &'a str,
+    pub(in crate::app) font_color_hsv_draft: SettingsSubtitleHsv,
+    pub(in crate::app) outline_color_hsv_draft: SettingsSubtitleHsv,
 }
 
 struct SettingsSubtitleStyleState<'a> {
@@ -105,6 +107,8 @@ struct SettingsSubtitleStyleState<'a> {
     active_popover: Option<SettingsSubtitlePopover>,
     font_color_draft: &'a str,
     outline_color_draft: &'a str,
+    font_color_hsv_draft: SettingsSubtitleHsv,
+    outline_color_hsv_draft: SettingsSubtitleHsv,
 }
 
 struct SettingsSubtitleColorFieldSpec<'a> {
@@ -116,6 +120,7 @@ struct SettingsSubtitleColorFieldSpec<'a> {
     focus: Option<&'a FocusHandle>,
     is_open: bool,
     draft: &'a str,
+    hsv: SettingsSubtitleHsv,
 }
 
 pub(in crate::app) fn settings_subtitles_tab(
@@ -149,6 +154,8 @@ pub(in crate::app) fn settings_subtitles_tab(
                     active_popover: state.active_popover,
                     font_color_draft: state.font_color_draft,
                     outline_color_draft: state.outline_color_draft,
+                    font_color_hsv_draft: state.font_color_hsv_draft,
+                    outline_color_hsv_draft: state.outline_color_hsv_draft,
                 },
                 window,
                 cx,
@@ -313,6 +320,7 @@ fn settings_subtitle_style_controls(
                         focus: state.color_focuses.font,
                         is_open: state.active_popover == Some(SettingsSubtitlePopover::FontColor),
                         draft: state.font_color_draft,
+                        hsv: state.font_color_hsv_draft,
                     },
                     window,
                     cx,
@@ -331,6 +339,7 @@ fn settings_subtitle_style_controls(
                         is_open: state.active_popover
                             == Some(SettingsSubtitlePopover::OutlineColor),
                         draft: state.outline_color_draft,
+                        hsv: state.outline_color_hsv_draft,
                     },
                     window,
                     cx,
@@ -633,6 +642,7 @@ fn settings_subtitle_color_field(
         focus,
         is_open,
         draft,
+        hsv,
     } = spec;
     let popover = match target {
         SettingsSubtitleColorTarget::Font => SettingsSubtitlePopover::FontColor,
@@ -721,7 +731,7 @@ fn settings_subtitle_color_field(
     if is_open {
         field = field.child(
             deferred(settings_subtitle_color_picker(
-                target, &value, draft, focus, window, cx,
+                target, hsv, draft, focus, window, cx,
             ))
             .with_priority(10),
         );
@@ -732,13 +742,12 @@ fn settings_subtitle_color_field(
 
 fn settings_subtitle_color_picker(
     target: SettingsSubtitleColorTarget,
-    value: &str,
+    hsv: SettingsSubtitleHsv,
     draft: &str,
     focus: Option<&FocusHandle>,
     window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
-    let hsv = hex_to_subtitle_hsv(value);
     let align_right = target == SettingsSubtitleColorTarget::Outline;
     let input_kind = match target {
         SettingsSubtitleColorTarget::Font => FrameTextInputKind::SubtitleFontColorHex,
@@ -1028,6 +1037,7 @@ impl FrameRoot {
         value: &str,
     ) {
         self.settings_subtitle_popover = Some(popover);
+        self.set_subtitle_color_hsv_draft(target, hex_to_subtitle_hsv(value));
         self.set_subtitle_color_draft(target, value.to_uppercase());
     }
 
@@ -1035,10 +1045,50 @@ impl FrameRoot {
         &mut self,
         target: SettingsSubtitleColorTarget,
         value: String,
-    ) {
+    ) -> bool {
         match target {
-            SettingsSubtitleColorTarget::Font => self.subtitle_font_color_draft = value,
-            SettingsSubtitleColorTarget::Outline => self.subtitle_outline_color_draft = value,
+            SettingsSubtitleColorTarget::Font => {
+                if self.subtitle_font_color_draft == value {
+                    return false;
+                }
+                self.subtitle_font_color_draft = value;
+            }
+            SettingsSubtitleColorTarget::Outline => {
+                if self.subtitle_outline_color_draft == value {
+                    return false;
+                }
+                self.subtitle_outline_color_draft = value;
+            }
+        }
+        true
+    }
+
+    pub(in crate::app) fn set_subtitle_color_hsv_draft(
+        &mut self,
+        target: SettingsSubtitleColorTarget,
+        hsv: SettingsSubtitleHsv,
+    ) -> bool {
+        match target {
+            SettingsSubtitleColorTarget::Font => {
+                if self.subtitle_font_color_hsv_draft == hsv {
+                    return false;
+                }
+                self.subtitle_font_color_hsv_draft = hsv;
+            }
+            SettingsSubtitleColorTarget::Outline => {
+                if self.subtitle_outline_color_hsv_draft == hsv {
+                    return false;
+                }
+                self.subtitle_outline_color_hsv_draft = hsv;
+            }
+        }
+        true
+    }
+
+    fn subtitle_color_hsv_draft(&self, target: SettingsSubtitleColorTarget) -> SettingsSubtitleHsv {
+        match target {
+            SettingsSubtitleColorTarget::Font => self.subtitle_font_color_hsv_draft,
+            SettingsSubtitleColorTarget::Outline => self.subtitle_outline_color_hsv_draft,
         }
     }
 
@@ -1047,14 +1097,19 @@ impl FrameRoot {
         target: SettingsSubtitleColorTarget,
         value: &str,
     ) -> bool {
-        let normalized = normalized_hex_color(value).unwrap_or_else(|| value.to_string());
-        self.set_subtitle_color_draft(target, normalized.to_uppercase());
-        self.update_selected_config(|config| match target {
+        let Some(normalized) = normalized_hex_color(value) else {
+            return self.set_subtitle_color_draft(target, value.to_uppercase());
+        };
+        let draft_changed = self.set_subtitle_color_draft(target, normalized.to_uppercase());
+        let hsv_changed =
+            self.set_subtitle_color_hsv_draft(target, hex_to_subtitle_hsv(&normalized));
+        let config_changed = self.update_selected_config(|config| match target {
             SettingsSubtitleColorTarget::Font => apply_subtitle_font_color(config, &normalized),
             SettingsSubtitleColorTarget::Outline => {
                 apply_subtitle_outline_color(config, &normalized)
             }
-        })
+        });
+        draft_changed || hsv_changed || config_changed
     }
 
     pub(in crate::app) fn commit_subtitle_hsv_color(
@@ -1063,25 +1118,13 @@ impl FrameRoot {
         hsv: SettingsSubtitleHsv,
     ) -> bool {
         let hex = subtitle_hsv_to_hex(hsv.h, hsv.s, hsv.v);
-        self.commit_subtitle_color(target, &hex)
-    }
-
-    fn current_subtitle_color(&self, target: SettingsSubtitleColorTarget) -> String {
-        self.selected_config()
-            .map(|config| match target {
-                SettingsSubtitleColorTarget::Font => subtitle_color_value(
-                    config.subtitle_font_color.as_ref(),
-                    DEFAULT_SUBTITLE_FONT_COLOR,
-                ),
-                SettingsSubtitleColorTarget::Outline => subtitle_color_value(
-                    config.subtitle_outline_color.as_ref(),
-                    DEFAULT_SUBTITLE_OUTLINE_COLOR,
-                ),
-            })
-            .unwrap_or_else(|| match target {
-                SettingsSubtitleColorTarget::Font => DEFAULT_SUBTITLE_FONT_COLOR.to_string(),
-                SettingsSubtitleColorTarget::Outline => DEFAULT_SUBTITLE_OUTLINE_COLOR.to_string(),
-            })
+        let draft_changed = self.set_subtitle_color_draft(target, hex.to_uppercase());
+        let hsv_changed = self.set_subtitle_color_hsv_draft(target, hsv);
+        let config_changed = self.update_selected_config(|config| match target {
+            SettingsSubtitleColorTarget::Font => apply_subtitle_font_color(config, &hex),
+            SettingsSubtitleColorTarget::Outline => apply_subtitle_outline_color(config, &hex),
+        });
+        draft_changed || hsv_changed || config_changed
     }
 
     pub(in crate::app) fn set_subtitle_color_picker_bounds(
@@ -1137,7 +1180,7 @@ impl FrameRoot {
         kind: SettingsSubtitleColorDragKind,
         position: Point<Pixels>,
     ) -> bool {
-        let base_hsv = hex_to_subtitle_hsv(&self.current_subtitle_color(target));
+        let base_hsv = self.subtitle_color_hsv_draft(target);
         self.commit_subtitle_color_with_base_hsv(target, kind, position, base_hsv)
     }
 

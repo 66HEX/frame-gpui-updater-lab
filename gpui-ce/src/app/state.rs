@@ -64,6 +64,12 @@ impl FrameRoot {
             settings_subtitle_popover: None,
             subtitle_font_color_draft: DEFAULT_SUBTITLE_FONT_COLOR.to_uppercase(),
             subtitle_outline_color_draft: DEFAULT_SUBTITLE_OUTLINE_COLOR.to_uppercase(),
+            subtitle_font_color_hsv_draft: settings_panel::hex_to_subtitle_hsv(
+                DEFAULT_SUBTITLE_FONT_COLOR,
+            ),
+            subtitle_outline_color_hsv_draft: settings_panel::hex_to_subtitle_hsv(
+                DEFAULT_SUBTITLE_OUTLINE_COLOR,
+            ),
             subtitle_color_picker_bounds: SettingsSubtitleColorPickerBounds::default(),
             preview_crop_file_id: None,
             preview_crop_mode: false,

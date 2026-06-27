@@ -123,6 +123,8 @@ impl Render for FrameRoot {
                         subtitle_popover: self.settings_subtitle_popover,
                         subtitle_font_color_draft: &self.subtitle_font_color_draft,
                         subtitle_outline_color_draft: &self.subtitle_outline_color_draft,
+                        subtitle_font_color_hsv_draft: self.subtitle_font_color_hsv_draft,
+                        subtitle_outline_color_hsv_draft: self.subtitle_outline_color_hsv_draft,
                         preset_name: &self.preset_name_draft,
                         preset_name_focus: Some(&preset_name_focus),
                         presets: &self.presets,

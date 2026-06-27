@@ -202,6 +202,7 @@ impl FrameRoot {
         self.apply_settings_subtitles_fixture();
         self.settings_subtitle_popover = Some(SettingsSubtitlePopover::FontColor);
         self.subtitle_font_color_draft = "#FFD166".to_string();
+        self.subtitle_font_color_hsv_draft = settings_panel::hex_to_subtitle_hsv("#ffd166");
     }
     pub(super) fn apply_settings_presets_fixture(&mut self) {
         self.apply_preview_ready_fixture();
