@@ -35,6 +35,13 @@ pub const TITLEBAR_ICON_BUTTON_SIZE: f32 = 30.0;
 pub const TITLEBAR_NAV_BUTTON_HEIGHT: f32 = 24.0;
 pub const TITLEBAR_ICON_SIZE: f32 = 14.0;
 pub const TITLEBAR_ACTION_ICON_SIZE: f32 = 16.0;
+pub const TITLEBAR_PLATFORM_DIVIDER_HEIGHT: f32 = 20.0;
+pub const TITLEBAR_WINDOWS_WINDOW_BUTTON_WIDTH: f32 = 46.0;
+pub const TITLEBAR_WINDOWS_WINDOW_ICON_SIZE: f32 = 18.0;
+pub const TITLEBAR_WINDOWS_WINDOW_MAX_ICON_SIZE: f32 = 14.0;
+pub const TITLEBAR_LINUX_WINDOW_BUTTON_SIZE: f32 = 28.0;
+pub const TITLEBAR_LINUX_WINDOW_CONTROLS_GAP: f32 = 2.0;
+pub const TITLEBAR_LINUX_WINDOW_CONTROLS_PADDING_X: f32 = 8.0;
 pub const WORKSPACE_COLUMNS: u16 = 12;
 pub const WORKSPACE_GAP: f32 = 16.0;
 pub const LEFT_COLUMN_SPAN: u16 = 8;
@@ -424,6 +431,25 @@ mod tests {
         #[test]
         fn titlebar_segment_matches_original_thirty_pixel_control() {
             assert_eq!(TITLEBAR_SEGMENT_HEIGHT, 30.0);
+        }
+
+        #[test]
+        fn platform_titlebar_divider_matches_windows_linux_original_height() {
+            assert_eq!(TITLEBAR_PLATFORM_DIVIDER_HEIGHT, 20.0);
+        }
+
+        #[test]
+        fn windows_titlebar_controls_match_original_hit_areas() {
+            assert_eq!(TITLEBAR_WINDOWS_WINDOW_BUTTON_WIDTH, 46.0);
+            assert_eq!(TITLEBAR_WINDOWS_WINDOW_ICON_SIZE, 18.0);
+            assert_eq!(TITLEBAR_WINDOWS_WINDOW_MAX_ICON_SIZE, 14.0);
+        }
+
+        #[test]
+        fn linux_titlebar_controls_match_original_compact_buttons() {
+            assert_eq!(TITLEBAR_LINUX_WINDOW_BUTTON_SIZE, 28.0);
+            assert_eq!(TITLEBAR_LINUX_WINDOW_CONTROLS_GAP, 2.0);
+            assert_eq!(TITLEBAR_LINUX_WINDOW_CONTROLS_PADDING_X, 8.0);
         }
 
         #[test]

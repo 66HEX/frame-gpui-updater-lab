@@ -4,7 +4,42 @@ use super::primitives::*;
 use super::settings_panel::{settings_hint_text, settings_section};
 use super::*;
 
-pub(super) fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> impl IntoElement {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum FrameTitlebarPlatform {
+    Macos,
+    Windows,
+    Linux,
+}
+
+impl FrameTitlebarPlatform {
+    pub(super) const fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Macos
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
+        } else {
+            Self::Linux
+        }
+    }
+}
+
+pub(super) fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+    titlebar_for_platform(FrameTitlebarPlatform::current(), state, cx)
+}
+
+pub(super) fn titlebar_for_platform(
+    platform: FrameTitlebarPlatform,
+    state: FrameAppState,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
+    match platform {
+        FrameTitlebarPlatform::Macos => macos_titlebar(state, cx),
+        FrameTitlebarPlatform::Windows => windows_titlebar(state, cx),
+        FrameTitlebarPlatform::Linux => linux_titlebar(state, cx),
+    }
+}
+
+pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
     div()
         .h(px(TITLEBAR_HEIGHT))
         .w_full()
@@ -83,6 +118,124 @@ pub(super) fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> imp
                     )),
                 ),
         )
+}
+
+pub(super) fn windows_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+    div()
+        .relative()
+        .h(px(TITLEBAR_HEIGHT))
+        .w_full()
+        .flex_none()
+        .window_control_area(WindowControlArea::Drag)
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .child(platform_titlebar_content(state, cx))
+        .child(windows_window_controls(cx))
+}
+
+pub(super) fn linux_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+    div()
+        .relative()
+        .h(px(TITLEBAR_HEIGHT))
+        .w_full()
+        .flex_none()
+        .window_control_area(WindowControlArea::Drag)
+        .text_size(px(theme::TEXT_LABEL_SIZE))
+        .child(platform_titlebar_content(state, cx))
+        .child(linux_window_controls(cx))
+}
+
+pub(super) fn platform_titlebar_content(
+    state: FrameAppState,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
+    div()
+        .absolute()
+        .inset_0()
+        .mt_2()
+        .flex()
+        .items_center()
+        .px_4()
+        .child(
+            div()
+                .grid()
+                .grid_cols(WORKSPACE_COLUMNS)
+                .gap(px(WORKSPACE_GAP))
+                .w_full()
+                .child(
+                    div()
+                        .col_span(LEFT_COLUMN_SPAN)
+                        .mt_2()
+                        .flex()
+                        .items_center()
+                        .gap_6()
+                        .child(platform_frame_logo())
+                        .child(platform_titlebar_divider())
+                        .child(titlebar_navigation(state.active_view, cx))
+                        .child(platform_titlebar_divider())
+                        .child(titlebar_stats(state)),
+                )
+                .child(
+                    div()
+                        .col_span(RIGHT_COLUMN_SPAN)
+                        .mt_2()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(titlebar_settings_button(cx))
+                        .child(titlebar_add_source_button(cx))
+                        .child(titlebar_start_button(state, cx)),
+                ),
+        )
+}
+
+pub(super) fn titlebar_settings_button(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+    action_button(assets::ICON_SETTINGS, None, ButtonVariant::Secondary, true)
+        .id("titlebar-settings")
+        .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+            if root.settings_ui.is_open {
+                root.close_app_settings();
+            } else {
+                root.open_app_settings();
+            }
+            cx.notify();
+        }))
+}
+
+pub(super) fn titlebar_add_source_button(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+    action_button(
+        assets::ICON_PLUS,
+        Some("ADD SOURCE"),
+        ButtonVariant::Secondary,
+        true,
+    )
+    .id("titlebar-add-source")
+    .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        root.prompt_add_source(cx);
+    }))
+}
+
+pub(super) fn titlebar_start_button(
+    state: FrameAppState,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    action_button(
+        assets::ICON_PLAY,
+        Some(if state.is_processing {
+            "PROCESSING"
+        } else {
+            "START"
+        }),
+        ButtonVariant::Default,
+        state.can_start_conversion(),
+    )
+    .id("titlebar-start")
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if state.can_start_conversion() {
+            root.start_selected_conversions(cx);
+        }
+    }))
 }
 
 pub(super) fn app_settings_sheet(
@@ -350,6 +503,176 @@ pub(super) fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
         )
 }
 
+pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
+    div()
+        .absolute()
+        .top_0()
+        .right_0()
+        .h_full()
+        .flex()
+        .items_center()
+        .child(
+            titlebar_window_button(
+                "titlebar-windows-minimize",
+                assets::ICON_MINUS,
+                TITLEBAR_WINDOWS_WINDOW_ICON_SIZE,
+                TITLEBAR_WINDOWS_WINDOW_BUTTON_WIDTH,
+                TITLEBAR_HEIGHT,
+                0.0,
+                false,
+            )
+            .window_control_area(WindowControlArea::Min)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.minimize_window();
+            })),
+        )
+        .child(
+            titlebar_window_button(
+                "titlebar-windows-maximize",
+                assets::ICON_SQUARE,
+                TITLEBAR_WINDOWS_WINDOW_MAX_ICON_SIZE,
+                TITLEBAR_WINDOWS_WINDOW_BUTTON_WIDTH,
+                TITLEBAR_HEIGHT,
+                0.0,
+                false,
+            )
+            .window_control_area(WindowControlArea::Max)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.zoom_window();
+            })),
+        )
+        .child(
+            titlebar_window_button(
+                "titlebar-windows-close",
+                assets::ICON_CLOSE,
+                TITLEBAR_WINDOWS_WINDOW_ICON_SIZE,
+                TITLEBAR_WINDOWS_WINDOW_BUTTON_WIDTH,
+                TITLEBAR_HEIGHT,
+                0.0,
+                true,
+            )
+            .window_control_area(WindowControlArea::Close)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.remove_window();
+            })),
+        )
+}
+
+pub(super) fn linux_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
+    div()
+        .absolute()
+        .top_0()
+        .right_0()
+        .h_full()
+        .flex()
+        .items_center()
+        .gap(px(TITLEBAR_LINUX_WINDOW_CONTROLS_GAP))
+        .px(px(TITLEBAR_LINUX_WINDOW_CONTROLS_PADDING_X))
+        .child(
+            titlebar_window_button(
+                "titlebar-linux-minimize",
+                assets::ICON_MINUS,
+                TITLEBAR_ACTION_ICON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                theme::RADIUS_SM,
+                false,
+            )
+            .window_control_area(WindowControlArea::Min)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.minimize_window();
+            })),
+        )
+        .child(
+            titlebar_window_button(
+                "titlebar-linux-maximize",
+                assets::ICON_SQUARE,
+                TITLEBAR_ACTION_ICON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                theme::RADIUS_SM,
+                false,
+            )
+            .window_control_area(WindowControlArea::Max)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.zoom_window();
+            })),
+        )
+        .child(
+            titlebar_window_button(
+                "titlebar-linux-close",
+                assets::ICON_CLOSE,
+                TITLEBAR_ACTION_ICON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
+                theme::RADIUS_SM,
+                true,
+            )
+            .window_control_area(WindowControlArea::Close)
+            .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                window.remove_window();
+            })),
+        )
+}
+
+pub(super) fn titlebar_window_button(
+    id: &'static str,
+    icon: &'static str,
+    icon_size: f32,
+    width: f32,
+    height: f32,
+    radius: f32,
+    destructive: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let hover_background = if destructive {
+        theme::FRAME_RED
+    } else {
+        theme::FRAME_GRAY_100
+    };
+    let active_background = if destructive {
+        theme::FRAME_RED
+    } else {
+        theme::FRAME_GRAY_200
+    };
+    let hover_foreground = theme::FOREGROUND;
+    let foreground = theme::FRAME_GRAY_600;
+
+    div()
+        .id(id)
+        .group(id)
+        .w(px(width))
+        .h(px(height))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(radius))
+        .bg(color(theme::TRANSPARENT))
+        .text_color(color(foreground))
+        .hover(move |style| {
+            style
+                .bg(color(hover_background))
+                .text_color(color(hover_foreground))
+                .cursor_pointer()
+        })
+        .active(move |style| style.bg(color(active_background)))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            button_mouse_down(true, window, cx);
+        })
+        .child(icon_svg_with_hover(
+            icon,
+            icon_size,
+            color(foreground),
+            id,
+            color(hover_foreground),
+        ))
+}
+
 pub(super) fn traffic_light(
     fill: &'static str,
     border: &'static str,
@@ -403,8 +726,27 @@ pub(super) fn frame_logo() -> gpui::Div {
         )
 }
 
+pub(super) fn platform_frame_logo() -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_color(color(theme::FRAME_GRAY_600))
+        .child(
+            svg()
+                .path(assets::ICON_FRAME)
+                .w(px(TITLEBAR_LOGO_SIZE))
+                .h(px(TITLEBAR_LOGO_SIZE))
+                .text_color(color(theme::FRAME_GRAY_600)),
+        )
+}
+
 pub(super) fn titlebar_divider() -> gpui::Div {
     vertical_separator(TITLEBAR_DIVIDER_HEIGHT)
+}
+
+pub(super) fn platform_titlebar_divider() -> gpui::Div {
+    vertical_separator(TITLEBAR_PLATFORM_DIVIDER_HEIGHT)
 }
 
 pub(super) fn titlebar_navigation(
@@ -531,4 +873,22 @@ pub(super) fn titlebar_segment(
             color(theme::FOREGROUND),
         ))
         .child(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_titlebar_platform_matches_compile_target() {
+        let expected = if cfg!(target_os = "macos") {
+            FrameTitlebarPlatform::Macos
+        } else if cfg!(target_os = "windows") {
+            FrameTitlebarPlatform::Windows
+        } else {
+            FrameTitlebarPlatform::Linux
+        };
+
+        assert_eq!(FrameTitlebarPlatform::current(), expected);
+    }
 }
