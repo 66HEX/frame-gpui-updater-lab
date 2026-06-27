@@ -703,17 +703,19 @@ fn settings_subtitle_color_field(
                         )
                         .child(
                             div()
+                                .flex_1()
                                 .min_w_0()
+                                .w_full()
                                 .truncate()
                                 .text_color(color(theme::FOREGROUND))
                                 .child(value.to_uppercase()),
                         ),
                 )
-                .child(icon_svg(
+                .child(div().flex_shrink_0().child(icon_svg(
                     assets::ICON_CHEVRONS_UP_DOWN,
                     12.0,
                     color(theme::FOREGROUND),
-                )),
+                ))),
         );
 
     if is_open {
@@ -1080,7 +1082,7 @@ impl FrameRoot {
             })
     }
 
-    fn set_subtitle_color_picker_bounds(
+    pub(in crate::app) fn set_subtitle_color_picker_bounds(
         &mut self,
         target: SettingsSubtitleColorTarget,
         kind: SettingsSubtitleColorDragKind,
@@ -1127,7 +1129,7 @@ impl FrameRoot {
         }
     }
 
-    fn commit_subtitle_color_at_position(
+    pub(in crate::app) fn commit_subtitle_color_at_position(
         &mut self,
         target: SettingsSubtitleColorTarget,
         kind: SettingsSubtitleColorDragKind,
