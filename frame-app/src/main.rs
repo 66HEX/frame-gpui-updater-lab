@@ -13,7 +13,7 @@ fn main() {
             let bounds =
                 Bounds::centered(None, size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT)), cx);
             cx.open_window(frame_window_options(bounds), |_, cx| {
-                cx.new(|_| FrameRoot::new())
+                cx.new(|_| FrameRoot::new_with_platform_persistence())
             })
             .expect("failed to open Frame GPUI window");
 

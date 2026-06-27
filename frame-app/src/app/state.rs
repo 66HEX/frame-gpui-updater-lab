@@ -2,6 +2,35 @@ use super::*;
 
 impl FrameRoot {
     pub fn new() -> Self {
+        Self::new_inner(None, AppSettings::default())
+    }
+
+    pub fn new_with_platform_persistence() -> Self {
+        AppPersistence::platform().map_or_else(|_| Self::new(), Self::new_with_persistence)
+    }
+
+    pub(crate) fn new_with_persistence(persistence: AppPersistence) -> Self {
+        let settings = persistence.load().unwrap_or_default();
+        Self::new_inner(Some(persistence), settings)
+    }
+
+    fn new_inner(persistence: Option<AppPersistence>, persisted_settings: AppSettings) -> Self {
+        let conversion_processes = ConversionProcessController::default();
+        let max_concurrency = if conversion_processes
+            .update_max_concurrency(persisted_settings.max_concurrency)
+            .is_ok()
+        {
+            persisted_settings.max_concurrency
+        } else {
+            DEFAULT_MAX_CONCURRENCY
+        };
+        let presets = merged_presets(persisted_settings.custom_presets);
+        let settings_ui = SettingsUiState {
+            max_concurrency_draft: max_concurrency.to_string(),
+            next_custom_preset_sequence: next_custom_preset_sequence(&presets),
+            ..SettingsUiState::default()
+        };
+
         let mut root = Self {
             active_view: active_view_from_env_value(
                 std::env::var("FRAME_GPUI_INITIAL_VIEW").ok().as_deref(),
@@ -11,18 +40,19 @@ impl FrameRoot {
             logs_scroll_handle: UniformListScrollHandle::new(),
             last_log_scroll_target: None,
             is_processing: false,
-            settings_ui: SettingsUiState::default(),
-            max_concurrency: DEFAULT_MAX_CONCURRENCY,
+            settings_ui,
+            max_concurrency,
             text_input_ui: FrameTextInputUiState::default(),
             source_metadata: SourceMetadataStore::default(),
-            conversion_processes: ConversionProcessController::default(),
+            conversion_processes,
             available_encoders: AvailableEncoders::default(),
             subtitle_font_families: frame_core::fonts::list_system_font_families(),
-            presets: default_presets(),
+            presets,
             subtitle_ui: SubtitleUiState::default(),
             preview_ui: PreviewUiState::default(),
             native_titlebar_controls_hidden: false,
             next_file_sequence: 0,
+            persistence,
         };
 
         root.apply_visual_fixture(visual_fixture_from_env_value(
@@ -47,10 +77,49 @@ impl FrameRoot {
     pub(super) fn normalize_selected_config(&mut self, metadata: Option<&SourceMetadata>) -> bool {
         self.update_selected_config(|config| normalize_output_config(config, metadata))
     }
+
+    pub(super) fn persist_app_settings(
+        &self,
+    ) -> Result<(), crate::app_persistence::AppPersistenceError> {
+        let Some(persistence) = &self.persistence else {
+            return Ok(());
+        };
+
+        persistence.save(&AppSettings::from_runtime(
+            self.max_concurrency,
+            &self.presets,
+        ))
+    }
 }
 
 impl Default for FrameRoot {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn merged_presets(custom_presets: Vec<PresetDefinition>) -> Vec<PresetDefinition> {
+    let mut presets = default_presets();
+
+    for preset in custom_presets {
+        if !presets.iter().any(|existing| existing.id == preset.id) {
+            presets.push(preset);
+        }
+    }
+
+    presets
+}
+
+fn next_custom_preset_sequence(presets: &[PresetDefinition]) -> u64 {
+    presets
+        .iter()
+        .filter(|preset| !preset.built_in)
+        .filter_map(|preset| {
+            preset
+                .id
+                .strip_prefix("custom-preset-")
+                .and_then(|suffix| suffix.parse::<u64>().ok())
+        })
+        .max()
+        .unwrap_or(0)
 }

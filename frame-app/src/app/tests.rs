@@ -7,6 +7,14 @@ use super::preview_panel::{
 use super::primitives::{ButtonVariant, button_colors};
 use super::settings_panel::{hex_to_subtitle_hsv, subtitle_hsv_to_hex};
 use super::*;
+use crate::app_persistence::{AppPersistence, AppSettings};
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+static TEST_SETTINGS_PATH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 mod frame_root_imports {
     use super::*;
@@ -170,6 +178,37 @@ mod frame_root_conversion {
     }
 
     #[test]
+    fn new_with_persistence_hydrates_max_concurrency_and_custom_presets() {
+        let persistence = AppPersistence::from_settings_path(test_settings_path());
+        persistence
+            .save(&AppSettings {
+                max_concurrency: 6,
+                custom_presets: vec![PresetDefinition::custom(
+                    "custom-preset-7".to_string(),
+                    "Review MP4".to_string(),
+                    ConversionConfig::default(),
+                )],
+            })
+            .expect("settings should be saved");
+
+        let root = FrameRoot::new_with_persistence(persistence);
+
+        assert_eq!(root.max_concurrency, 6);
+        assert_eq!(
+            root.conversion_processes
+                .current_max_concurrency()
+                .expect("max concurrency should be readable"),
+            6
+        );
+        assert!(
+            root.presets
+                .iter()
+                .any(|preset| preset.name == "Review MP4")
+        );
+        assert_eq!(root.settings_ui.next_custom_preset_sequence, 7);
+    }
+
+    #[test]
     fn apply_max_concurrency_draft_updates_live_controller_limit() {
         let mut root = FrameRoot::new();
         root.settings_ui.max_concurrency_draft = "4".to_string();
@@ -182,6 +221,23 @@ mod frame_root_conversion {
                 .current_max_concurrency()
                 .expect("max concurrency should be readable"),
             4
+        );
+    }
+
+    #[test]
+    fn apply_max_concurrency_draft_persists_updated_limit() {
+        let persistence = AppPersistence::from_settings_path(test_settings_path());
+        let mut root = FrameRoot::new_with_persistence(persistence.clone());
+        root.settings_ui.max_concurrency_draft = "5".to_string();
+
+        assert!(root.apply_max_concurrency_draft());
+
+        assert_eq!(
+            persistence
+                .load()
+                .expect("settings should be readable")
+                .max_concurrency,
+            5
         );
     }
 
@@ -540,6 +596,61 @@ mod frame_root_conversion {
                 .any(|preset| preset.name == "Review MP4")
         );
         assert!(root.settings_ui.preset_name_draft.is_empty());
+    }
+
+    #[test]
+    fn save_preset_from_draft_persists_custom_preset_with_unique_id() {
+        let persistence = AppPersistence::from_settings_path(test_settings_path());
+        persistence
+            .save(&AppSettings {
+                max_concurrency: DEFAULT_MAX_CONCURRENCY,
+                custom_presets: vec![PresetDefinition::custom(
+                    "custom-preset-3".to_string(),
+                    "Existing".to_string(),
+                    ConversionConfig::default(),
+                )],
+            })
+            .expect("settings should be saved");
+        let mut root = FrameRoot::new_with_persistence(persistence.clone());
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.settings_ui.preset_name_draft = "Review MP4".to_string();
+
+        assert!(root.save_preset_from_draft());
+
+        let settings = persistence.load().expect("settings should be readable");
+        assert!(
+            settings
+                .custom_presets
+                .iter()
+                .any(|preset| preset.id == "custom-preset-4" && preset.name == "Review MP4")
+        );
+    }
+
+    #[test]
+    fn delete_preset_persists_removed_custom_preset() {
+        let persistence = AppPersistence::from_settings_path(test_settings_path());
+        persistence
+            .save(&AppSettings {
+                max_concurrency: DEFAULT_MAX_CONCURRENCY,
+                custom_presets: vec![PresetDefinition::custom(
+                    "custom-preset-1".to_string(),
+                    "Review MP4".to_string(),
+                    ConversionConfig::default(),
+                )],
+            })
+            .expect("settings should be saved");
+        let mut root = FrameRoot::new_with_persistence(persistence.clone());
+
+        assert!(root.delete_preset("custom-preset-1"));
+
+        assert!(
+            persistence
+                .load()
+                .expect("settings should be readable")
+                .custom_presets
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1437,4 +1548,17 @@ mod visual_contract {
         assert_eq!(preview_panel::preview_toolbar_height(), 199.0);
         assert_eq!(preview_panel::preview_toolbar_center_margin(), -99.5);
     }
+}
+
+fn test_settings_path() -> PathBuf {
+    let sequence = TEST_SETTINGS_PATH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after unix epoch")
+        .as_millis();
+
+    std::env::temp_dir()
+        .join("frame-root-persistence-tests")
+        .join(format!("{}-{millis}-{sequence}", std::process::id()))
+        .join("settings.json")
 }

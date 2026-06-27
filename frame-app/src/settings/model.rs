@@ -1,4 +1,5 @@
 use frame_core::media_rules;
+use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_VIDEO_CODEC: &str = "libx264";
 pub const DEFAULT_VIDEO_BITRATE_MODE: &str = "crf";
@@ -79,7 +80,8 @@ pub const ALL_SETTINGS_TABS: [SettingsTab; 8] = [
     SettingsTab::Presets,
 ];
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ProcessingMode {
     #[default]
     Reencode,
@@ -116,7 +118,8 @@ impl ProcessingMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MetadataMode {
     #[default]
     Preserve,
@@ -165,7 +168,8 @@ impl MetadataMode {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct MetadataConfig {
     pub mode: MetadataMode,
     pub title: Option<String>,
@@ -343,11 +347,13 @@ pub struct SubtitleTrackOption {
     pub is_disabled: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PresetDefinition {
     pub id: String,
     pub name: String,
     pub config: ConversionConfig,
+    #[serde(default)]
     pub built_in: bool,
 }
 
@@ -393,7 +399,8 @@ impl PresetDefinition {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct ConversionConfig {
     pub processing_mode: ProcessingMode,
     pub container: String,
@@ -490,7 +497,8 @@ impl Default for ConversionConfig {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct CropSettings {
     pub enabled: bool,
     pub x: u32,

@@ -28,6 +28,10 @@ impl FrameRoot {
                 self.max_concurrency = value;
                 self.settings_ui.max_concurrency_draft = value.to_string();
                 self.settings_ui.max_concurrency_error = None;
+                if let Err(error) = self.persist_app_settings() {
+                    self.settings_ui.max_concurrency_error =
+                        Some(format!("Failed to save settings: {error}"));
+                }
                 true
             }
             Err(error) => {
@@ -89,12 +93,18 @@ impl FrameRoot {
             return false;
         };
 
-        self.settings_ui.next_custom_preset_sequence += 1;
-        let id = format!(
-            "custom-preset-{}",
-            self.settings_ui.next_custom_preset_sequence
-        );
+        let (id, next_sequence) = self.next_custom_preset_identity();
         self.presets.push(create_custom_preset(id, name, &config));
+        if let Err(error) = self.persist_app_settings() {
+            self.presets.pop();
+            self.settings_ui.preset_notice = Some(PresetNotice {
+                text: format!("Preset not saved: {error}"),
+                tone: PresetNoticeTone::Error,
+            });
+            return false;
+        }
+
+        self.settings_ui.next_custom_preset_sequence = next_sequence;
         self.settings_ui.preset_name_draft.clear();
         self.settings_ui.preset_notice = Some(PresetNotice {
             text: "Preset saved".to_string(),
@@ -116,7 +126,16 @@ impl FrameRoot {
             return false;
         };
 
-        self.presets.remove(index);
+        let removed = self.presets.remove(index);
+        if let Err(error) = self.persist_app_settings() {
+            self.presets.insert(index, removed);
+            self.settings_ui.preset_notice = Some(PresetNotice {
+                text: format!("Unable to delete: {error}"),
+                tone: PresetNoticeTone::Error,
+            });
+            return false;
+        }
+
         self.settings_ui.preset_notice = Some(PresetNotice {
             text: "Preset removed".to_string(),
             tone: PresetNoticeTone::Success,
@@ -222,5 +241,17 @@ impl FrameRoot {
         }
 
         changed
+    }
+
+    fn next_custom_preset_identity(&self) -> (String, u64) {
+        let mut sequence = self.settings_ui.next_custom_preset_sequence;
+
+        loop {
+            sequence += 1;
+            let id = format!("custom-preset-{sequence}");
+            if !self.presets.iter().any(|preset| preset.id == id) {
+                return (id, sequence);
+            }
+        }
     }
 }
