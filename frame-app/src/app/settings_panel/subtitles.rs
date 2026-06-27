@@ -1,6 +1,9 @@
 use super::*;
 
-const SUBTITLE_DROPDOWN_TOP_OFFSET: f32 = SETTINGS_CONTROL_HEIGHT + 4.0;
+const SUBTITLE_FIELD_LABEL_STACK_HEIGHT: f32 = 20.0;
+const SUBTITLE_POPOVER_TRIGGER_GAP: f32 = 8.0;
+const SUBTITLE_POPOVER_TOP_OFFSET: f32 =
+    SUBTITLE_FIELD_LABEL_STACK_HEIGHT + SETTINGS_CONTROL_HEIGHT + SUBTITLE_POPOVER_TRIGGER_GAP;
 const SUBTITLE_SELECT_MAX_HEIGHT: f32 = 192.0;
 const SUBTITLE_COLOR_PANEL_WIDTH: f32 = 220.0;
 const SUBTITLE_COLOR_SV_HEIGHT: f32 = 96.0;
@@ -397,7 +400,7 @@ fn settings_subtitle_font_select(
         let mut list = div()
             .absolute()
             .id("settings-subtitle-font-options")
-            .top(px(SUBTITLE_DROPDOWN_TOP_OFFSET + 20.0))
+            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
@@ -452,7 +455,7 @@ fn settings_subtitle_font_size_select(
         let mut list = div()
             .absolute()
             .id("settings-subtitle-font-size-options")
-            .top(px(SUBTITLE_DROPDOWN_TOP_OFFSET + 20.0))
+            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
@@ -764,7 +767,7 @@ fn settings_subtitle_color_picker(
 
     div()
         .absolute()
-        .top(px(SUBTITLE_DROPDOWN_TOP_OFFSET + 20.0))
+        .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
         .when(align_right, |this| this.right_0())
         .when(!align_right, |this| this.left_0())
         .w(px(SUBTITLE_COLOR_PANEL_WIDTH))
