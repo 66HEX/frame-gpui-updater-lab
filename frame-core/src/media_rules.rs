@@ -38,6 +38,7 @@ struct MediaRules {
     audio_only_containers: HashSet<String>,
     video_only_containers: HashSet<String>,
     image_containers: HashSet<String>,
+    container_video_codec_order: HashMap<String, Vec<String>>,
     container_video_codec_compatibility: HashMap<String, HashSet<String>>,
     container_encoder_pixel_format_compatibility: HashMap<String, HashMap<String, HashSet<String>>>,
     container_video_stream_codec_compatibility: HashMap<String, HashSet<String>>,
@@ -51,11 +52,15 @@ struct MediaRules {
 
 impl From<MediaRulesRaw> for MediaRules {
     fn from(raw: MediaRulesRaw) -> Self {
+        let container_video_codec_order =
+            normalized_codec_vec_map(raw.container_video_codec_compatibility.clone());
+
         Self {
             all_containers: raw.all_containers,
             audio_only_containers: normalized_set(raw.audio_only_containers),
             video_only_containers: normalized_set(raw.video_only_containers),
             image_containers: normalized_set(raw.image_containers),
+            container_video_codec_order,
             container_video_codec_compatibility: normalized_codec_map(
                 raw.container_video_codec_compatibility,
             ),
@@ -110,6 +115,14 @@ pub fn image_containers() -> &'static HashSet<String> {
 #[must_use]
 pub fn video_codec_fallback_order() -> &'static [String] {
     &MEDIA_RULES.video_codec_fallback_order
+}
+
+#[must_use]
+pub fn video_codecs_for_container(container: &str) -> Option<&'static [String]> {
+    MEDIA_RULES
+        .container_video_codec_order
+        .get(&normalize(container))
+        .map(Vec::as_slice)
 }
 
 #[must_use]
@@ -259,6 +272,18 @@ fn normalized_codec_map(source: HashMap<String, Vec<String>>) -> HashMap<String,
         .collect()
 }
 
+fn normalized_codec_vec_map(source: HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
+    source
+        .into_iter()
+        .map(|(container, codecs)| {
+            (
+                normalize(container),
+                codecs.into_iter().map(normalize).collect(),
+            )
+        })
+        .collect()
+}
+
 fn normalized_nested_codec_map(
     source: HashMap<String, HashMap<String, Vec<String>>>,
 ) -> HashMap<String, HashMap<String, HashSet<String>>> {
@@ -317,6 +342,14 @@ mod tests {
     fn image_containers_do_not_support_audio_or_subtitles() {
         assert!(!container_supports_audio("png"));
         assert!(!container_supports_subtitles("png"));
+    }
+
+    #[test]
+    fn video_codecs_for_container_preserves_shared_json_order() {
+        assert_eq!(
+            video_codecs_for_container("png"),
+            Some(&["png".to_string()][..])
+        );
     }
 
     #[test]

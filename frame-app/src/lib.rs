@@ -9,6 +9,7 @@ pub mod conversion_runner;
 pub mod file_filters;
 pub mod file_queue;
 pub mod native_dialogs;
+pub mod notifications;
 pub mod preview;
 pub mod runtime_binaries;
 pub mod settings;

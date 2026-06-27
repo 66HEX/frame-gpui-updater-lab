@@ -16,6 +16,7 @@ directories = "6.0.0"
 frame-core = { path = "../frame-core" }
 gpui = { package = "gpui", git = "https://github.com/gpui-ce/gpui-ce" }
 gpui_platform = { git = "https://github.com/gpui-ce/gpui-ce", features = ["font-kit"] }
+notify-rust = "4.18.0"
 rfd = "0.16.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"

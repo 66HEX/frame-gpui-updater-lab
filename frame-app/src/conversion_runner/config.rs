@@ -157,6 +157,10 @@ fn default_video_codec_for_container(container: &str) -> String {
         .iter()
         .find(|codec| media_rules::is_video_codec_allowed(container, codec))
         .cloned()
+        .or_else(|| {
+            media_rules::video_codecs_for_container(container)
+                .and_then(|codecs| codecs.first().cloned())
+        })
         .unwrap_or_else(|| DEFAULT_VIDEO_CODEC.to_string())
 }
 

@@ -2,19 +2,40 @@ use super::*;
 
 impl FrameRoot {
     pub fn new() -> Self {
-        Self::new_inner(None, AppSettings::default())
+        Self::new_inner(None, AppSettings::default(), AppNotifier::disabled())
     }
 
     pub fn new_with_platform_persistence() -> Self {
-        AppPersistence::platform().map_or_else(|_| Self::new(), Self::new_with_persistence)
+        let notifier = AppNotifier::system();
+        match AppPersistence::platform() {
+            Ok(persistence) => Self::new_with_persistence_and_notifier(persistence, notifier),
+            Err(_) => Self::new_inner(None, AppSettings::default(), notifier),
+        }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_with_notifier(notifier: AppNotifier) -> Self {
+        Self::new_inner(None, AppSettings::default(), notifier)
+    }
+
+    #[cfg(test)]
     pub(crate) fn new_with_persistence(persistence: AppPersistence) -> Self {
-        let settings = persistence.load().unwrap_or_default();
-        Self::new_inner(Some(persistence), settings)
+        Self::new_with_persistence_and_notifier(persistence, AppNotifier::disabled())
     }
 
-    fn new_inner(persistence: Option<AppPersistence>, persisted_settings: AppSettings) -> Self {
+    fn new_with_persistence_and_notifier(
+        persistence: AppPersistence,
+        notifier: AppNotifier,
+    ) -> Self {
+        let settings = persistence.load().unwrap_or_default();
+        Self::new_inner(Some(persistence), settings, notifier)
+    }
+
+    fn new_inner(
+        persistence: Option<AppPersistence>,
+        persisted_settings: AppSettings,
+        notifier: AppNotifier,
+    ) -> Self {
         let conversion_processes = ConversionProcessController::default();
         let max_concurrency = if conversion_processes
             .update_max_concurrency(persisted_settings.max_concurrency)
@@ -46,6 +67,8 @@ impl FrameRoot {
             source_metadata: SourceMetadataStore::default(),
             conversion_processes,
             available_encoders: AvailableEncoders::default(),
+            active_conversion_task_ids: Vec::new(),
+            notifier,
             subtitle_font_families: frame_core::fonts::list_system_font_families(),
             presets,
             subtitle_ui: SubtitleUiState::default(),

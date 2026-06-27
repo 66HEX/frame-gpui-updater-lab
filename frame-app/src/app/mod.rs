@@ -55,13 +55,17 @@ use crate::{
     conversion_runner::{
         ConversionProcessController, conversion_task_from_file, run_conversion_batch_with_control,
     },
-    file_filters::{filter_supported_source_paths, is_supported_subtitle_path},
+    file_filters::{
+        AUDIO_FILE_EXTENSIONS, IMAGE_FILE_EXTENSIONS, filter_supported_source_paths,
+        is_supported_subtitle_path,
+    },
     file_queue::{
         BatchSelectionState, FileItem, FileQueue, FileStateTone, FileStatus, RowActionAvailability,
         format_file_size,
     },
     format_total_size,
     native_dialogs::{pick_source_files, pick_subtitle_file},
+    notifications::{AppNotifier, conversion_finished_notification_for_task_ids},
     preview::{
         ASPECT_OPTIONS, CropRect, DragHandle, MediaSnapshot,
         MetadataStatus as PreviewMetadataStatus, Point as PreviewPoint, PreviewControlAvailability,
@@ -185,6 +189,8 @@ pub struct FrameRoot {
     source_metadata: SourceMetadataStore,
     conversion_processes: ConversionProcessController,
     available_encoders: AvailableEncoders,
+    active_conversion_task_ids: Vec<String>,
+    notifier: AppNotifier,
     subtitle_font_families: Vec<String>,
     presets: Vec<PresetDefinition>,
     subtitle_ui: SubtitleUiState,

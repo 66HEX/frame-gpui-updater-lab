@@ -1075,6 +1075,7 @@ mod output_config {
         normalize_output_config(&mut config, Some(&metadata));
 
         assert_eq!(config.container, "png");
+        assert_eq!(config.video_codec, "png");
     }
 
     #[test]

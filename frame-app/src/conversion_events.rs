@@ -141,6 +141,12 @@ impl ConversionEventState {
                 queue.update_status(&payload.id, FileStatus::Completed, 100);
             }
             ConversionEvent::Error(payload) => {
+                if queue.file_by_id(&payload.id).is_some() {
+                    self.logs
+                        .entry(payload.id.clone())
+                        .or_default()
+                        .push(format!("[ERROR] {}", payload.error));
+                }
                 queue.update_error(&payload.id, payload.error);
             }
             ConversionEvent::Log(payload) => {
@@ -262,6 +268,7 @@ mod tests {
         let file = queue.file_by_id("task-1").expect("file should exist");
         assert_eq!(file.status, FileStatus::Error);
         assert_eq!(file.conversion_error.as_deref(), Some("ffmpeg failed"));
+        assert_eq!(state.logs_for("task-1"), ["[ERROR] ffmpeg failed"]);
     }
 
     #[test]

@@ -917,19 +917,35 @@ pub fn first_allowed_video_codec(
 ) -> String {
     let candidates = media_rules::video_codec_fallback_order().iter();
     let first = candidates
-        .filter(|codec| {
-            available_encoders.is_none_or(|encoders| {
-                VIDEO_CODEC_DEFINITIONS
-                    .iter()
-                    .find(|definition| definition.codec == codec.as_str())
-                    .and_then(|definition| definition.capability)
-                    .is_none_or(|capability| video_codec_capability_available(encoders, capability))
-            })
-        })
+        .filter(|codec| video_codec_available(codec, available_encoders))
         .find(|codec| is_video_codec_allowed_for_container(container, codec))
         .cloned();
 
-    first.unwrap_or_else(|| "libx264".to_string())
+    first
+        .or_else(|| {
+            media_rules::video_codecs_for_container(container).and_then(|codecs| {
+                codecs
+                    .iter()
+                    .find(|codec| video_codec_available(codec, available_encoders))
+                    .cloned()
+            })
+        })
+        .unwrap_or_else(|| {
+            media_rules::video_codec_fallback_order()
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "libx264".to_string())
+        })
+}
+
+fn video_codec_available(codec: &str, available_encoders: Option<&AvailableEncoders>) -> bool {
+    available_encoders.is_none_or(|encoders| {
+        VIDEO_CODEC_DEFINITIONS
+            .iter()
+            .find(|definition| definition.codec == codec)
+            .and_then(|definition| definition.capability)
+            .is_none_or(|capability| video_codec_capability_available(encoders, capability))
+    })
 }
 
 #[must_use]

@@ -8,9 +8,13 @@ use super::primitives::{ButtonVariant, button_colors};
 use super::settings_panel::{hex_to_subtitle_hsv, subtitle_hsv_to_hex};
 use super::*;
 use crate::app_persistence::{AppPersistence, AppSettings};
+use crate::notifications::{AppNotifier, ConversionNotificationSummary};
 use std::{
     path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -110,6 +114,43 @@ mod frame_root_conversion {
     }
 
     #[test]
+    fn queue_selected_conversion_tasks_normalizes_each_file_from_own_metadata() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("video", "/tmp/one.mp4", 1));
+        root.file_queue
+            .add_file(FileItem::from_path("image", "/tmp/two.png", 1));
+        root.source_metadata.mark_ready(
+            "image",
+            SourceMetadata {
+                media_kind: Some(SourceKind::Image),
+                ..SourceMetadata::default()
+            },
+        );
+
+        let tasks = root.queue_selected_conversion_tasks();
+
+        let image_task = tasks
+            .iter()
+            .find(|task| task.id == "image")
+            .expect("image task should be queued");
+        assert_eq!(image_task.config.container, "png");
+        assert_eq!(image_task.config.video_codec, "png");
+    }
+
+    #[test]
+    fn queue_selected_conversion_tasks_infers_image_config_from_extension_without_metadata() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("image", "/tmp/two.PNG", 1));
+
+        let tasks = root.queue_selected_conversion_tasks();
+
+        assert_eq!(tasks[0].config.container, "png");
+        assert_eq!(tasks[0].config.video_codec, "png");
+    }
+
+    #[test]
     fn apply_conversion_event_updates_processing_state_from_queue() {
         let mut root = FrameRoot::new();
         root.file_queue
@@ -123,6 +164,69 @@ mod frame_root_conversion {
         assert_eq!(
             root.file_queue.file_by_id("first").map(|file| file.status),
             Some(FileStatus::Completed)
+        );
+    }
+
+    #[test]
+    fn apply_conversion_event_notifies_when_active_batch_settles() {
+        let notifications = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let received_notifications = notifications.clone();
+        let mut root = FrameRoot::new_with_notifier(AppNotifier::from_conversion_finished_handler(
+            move |summary| {
+                received_notifications
+                    .lock()
+                    .expect("notifications should be writable")
+                    .push(summary);
+            },
+        ));
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.file_queue
+            .add_file(FileItem::from_path("second", "/tmp/two.mp4", 1));
+        root.queue_selected_conversion_tasks();
+        root.active_conversion_task_ids = vec!["first".to_string(), "second".to_string()];
+        root.is_processing = true;
+
+        root.apply_conversion_event(ConversionEvent::completed("first", "/tmp/one.mp4"));
+        root.apply_conversion_event(ConversionEvent::error("second", "ffmpeg failed"));
+
+        assert_eq!(
+            notifications
+                .lock()
+                .expect("notifications should be readable")
+                .as_slice(),
+            [ConversionNotificationSummary {
+                completed_count: 1,
+                error_count: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn apply_conversion_event_does_not_notify_when_active_batch_has_no_results() {
+        let notifications = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let received_notifications = notifications.clone();
+        let mut root = FrameRoot::new_with_notifier(AppNotifier::from_conversion_finished_handler(
+            move |summary| {
+                received_notifications
+                    .lock()
+                    .expect("notifications should be writable")
+                    .push(summary);
+            },
+        ));
+        root.file_queue
+            .add_file(FileItem::from_path("first", "/tmp/one.mp4", 1));
+        root.queue_selected_conversion_tasks();
+        root.active_conversion_task_ids = vec!["first".to_string()];
+        root.is_processing = true;
+
+        root.apply_conversion_event(ConversionEvent::cancelled("first"));
+
+        assert!(
+            notifications
+                .lock()
+                .expect("notifications should be readable")
+                .is_empty()
         );
     }
 
