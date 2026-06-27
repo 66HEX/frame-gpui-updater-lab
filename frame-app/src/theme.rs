@@ -26,10 +26,10 @@ impl RgbaToken {
 }
 
 pub const BACKGROUND: RgbaToken = RgbaToken::from_rgb(20, 22, 26);
-pub const FOREGROUND: RgbaToken = RgbaToken::from_rgb(255, 255, 255);
+pub const FOREGROUND: RgbaToken = RgbaToken::from_rgb(235, 235, 255);
 pub const TRANSPARENT: RgbaToken = RgbaToken::from_rgb(0, 0, 0).with_alpha(0.0);
-pub const SIDEBAR: RgbaToken = RgbaToken::from_rgb(32, 34, 37);
-pub const DROPDOWN: RgbaToken = RgbaToken::from_rgb(43, 45, 48);
+pub const SIDEBAR: RgbaToken = RgbaToken::from_rgb(27, 29, 33);
+pub const DROPDOWN: RgbaToken = RgbaToken::from_rgb(37, 39, 44);
 
 pub const FRAME_GRAY_100: RgbaToken = FOREGROUND.with_alpha(0.05);
 pub const FRAME_GRAY_200: RgbaToken = FOREGROUND.with_alpha(0.10);
