@@ -120,6 +120,7 @@ impl Render for FrameRoot {
             .flex()
             .flex_col()
             .overflow_hidden()
+            .group(ROOT_DROP_GROUP)
             .bg(color(theme::BACKGROUND))
             .text_color(color(theme::FOREGROUND))
             .text_size(px(theme::TEXT_UI_SIZE))
@@ -153,6 +154,8 @@ impl Render for FrameRoot {
                 cx,
             ));
         }
+
+        root = root.child(drag_drop_overlay(cx));
 
         root
     }

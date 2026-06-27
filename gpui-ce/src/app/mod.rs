@@ -21,7 +21,7 @@ mod tests;
 mod workspace;
 pub use runtime::{frame_window_options, init_app};
 
-use chrome::{app_settings_sheet, titlebar};
+use chrome::{app_settings_sheet, drag_drop_overlay, titlebar};
 use input::{FrameTextInputKind, FrameTextInputUiState};
 use logs_panel::logs_view;
 use preview_panel::{
@@ -157,6 +157,7 @@ const TRAFFIC_MINIMIZE_SYMBOL: &str = "#5a3900";
 const TRAFFIC_ZOOM_FILL: &str = "#27c93f";
 const TRAFFIC_ZOOM_BORDER: &str = "#1aab29";
 const TRAFFIC_ZOOM_SYMBOL: &str = "#004200";
+const ROOT_DROP_GROUP: &str = "frame-root-drop-target";
 const DEFAULT_CROP_X: f64 = 0.1;
 const DEFAULT_CROP_Y: f64 = 0.1;
 const DEFAULT_CROP_SIZE: f64 = 0.8;

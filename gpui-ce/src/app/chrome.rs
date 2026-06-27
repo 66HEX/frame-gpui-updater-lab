@@ -260,6 +260,44 @@ pub(super) fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::D
     )
 }
 
+pub(super) fn drag_drop_overlay(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+    div()
+        .id("drag-drop-overlay")
+        .invisible()
+        .absolute()
+        .inset_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .p_4()
+        .bg(color(theme::BACKGROUND.with_alpha(0.60)))
+        .backdrop_blur(px(4.0))
+        .group_drag_over::<ExternalPaths>(ROOT_DROP_GROUP, |style| style.visible())
+        .on_drop(cx.listener(|root, paths: &ExternalPaths, _window, cx| {
+            cx.stop_propagation();
+            root.import_source_paths(paths.paths().to_vec(), cx);
+        }))
+        .child(
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(theme::RADIUS_LG))
+                .border_1()
+                .border_dashed()
+                .border_color(color(theme::FRAME_GRAY_100))
+                .bg(color(theme::FRAME_GRAY_100))
+                .shadow(card_surface_shadows())
+                .child(
+                    div()
+                        .text_size(px(theme::TEXT_LABEL_SIZE))
+                        .text_color(color(theme::FOREGROUND))
+                        .child("IMPORT SOURCE FILES"),
+                ),
+        )
+}
+
 pub(super) fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
     div()
         .flex()
