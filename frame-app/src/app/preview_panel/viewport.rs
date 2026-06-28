@@ -8,6 +8,8 @@ struct PreviewCanvasBoundsProbe {
     owner: Entity<FrameRoot>,
 }
 
+struct PreviewViewportRoundedClip;
+
 impl IntoElement for PreviewCanvasBoundsProbe {
     type Element = Self;
 
@@ -75,6 +77,71 @@ impl Element for PreviewCanvasBoundsProbe {
     }
 }
 
+impl IntoElement for PreviewViewportRoundedClip {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for PreviewViewportRoundedClip {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let style = Style {
+            position: Position::Absolute,
+            size: size(relative(1.0).into(), relative(1.0).into()),
+            ..Style::default()
+        };
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Self::PrepaintState {
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        _cx: &mut App,
+    ) {
+        // GPUI clips overflow to a rectangular content mask, so the media layer needs
+        // exact rounded-corner cutouts painted above it.
+        if let Some(path) = preview_viewport_rounded_clip_path(bounds, px(theme::RADIUS_MD)) {
+            window.paint_path(path, parse_hex("#1B1D21"));
+        }
+    }
+}
+
 pub(in crate::app) fn normalized_point_from_bounds(
     position: gpui::Point<Pixels>,
     bounds: Bounds<Pixels>,
@@ -109,9 +176,13 @@ pub(in crate::app) fn preview_viewport(
         .justify_center()
         .overflow_hidden()
         .rounded(px(theme::RADIUS_MD))
-        .bg(parse_hex("#000000"))
+        .bg(parse_hex("#14161A"))
         .shadow(input_highlight_shadows())
         .child(preview_viewport_content(state, cx));
+
+    if state.render_image.is_some() && state.media.is_some() {
+        viewport = viewport.child(PreviewViewportRoundedClip);
+    }
 
     if state.crop.crop_mode && state.crop.draft_crop.is_some() {
         viewport = viewport.child(preview_crop_aspect_bar(state, window, cx));
@@ -329,6 +400,82 @@ pub(in crate::app) fn preview_canvas_pan_enabled(state: &PreviewShellState) -> b
 fn preview_media_image(render_image: Arc<RenderImage>) -> gpui::Div {
     let image = img(render_image).size_full().object_fit(ObjectFit::Fill);
     div().absolute().inset_0().overflow_hidden().child(image)
+}
+
+fn preview_viewport_rounded_clip_path(
+    bounds: Bounds<Pixels>,
+    radius: Pixels,
+) -> Option<gpui::Path<Pixels>> {
+    let x0 = bounds.origin.x.as_f32();
+    let y0 = bounds.origin.y.as_f32();
+    let x1 = x0 + bounds.size.width.as_f32();
+    let y1 = y0 + bounds.size.height.as_f32();
+    let radius = radius
+        .as_f32()
+        .min((x1 - x0).max(0.0) / 2.0)
+        .min((y1 - y0).max(0.0) / 2.0);
+
+    if radius <= 0.0 {
+        return None;
+    }
+
+    let mut builder = gpui::PathBuilder::fill();
+    preview_viewport_corner_cutout(
+        &mut builder,
+        (x0, y0),
+        (x0 + radius, y0 + radius),
+        -std::f32::consts::FRAC_PI_2,
+        -std::f32::consts::PI,
+        radius,
+    );
+    preview_viewport_corner_cutout(
+        &mut builder,
+        (x1, y0),
+        (x1 - radius, y0 + radius),
+        -std::f32::consts::FRAC_PI_2,
+        0.0,
+        radius,
+    );
+    preview_viewport_corner_cutout(
+        &mut builder,
+        (x1, y1),
+        (x1 - radius, y1 - radius),
+        0.0,
+        std::f32::consts::FRAC_PI_2,
+        radius,
+    );
+    preview_viewport_corner_cutout(
+        &mut builder,
+        (x0, y1),
+        (x0 + radius, y1 - radius),
+        std::f32::consts::FRAC_PI_2,
+        std::f32::consts::PI,
+        radius,
+    );
+
+    builder.build().ok()
+}
+
+fn preview_viewport_corner_cutout(
+    builder: &mut gpui::PathBuilder,
+    outer: (f32, f32),
+    center: (f32, f32),
+    start_angle: f32,
+    end_angle: f32,
+    radius: f32,
+) {
+    const SEGMENTS: usize = 12;
+
+    builder.move_to(point(px(outer.0), px(outer.1)));
+    for index in 0..=SEGMENTS {
+        let progress = index as f32 / SEGMENTS as f32;
+        let angle = start_angle + (end_angle - start_angle) * progress;
+        builder.line_to(point(
+            px(center.0 + angle.cos() * radius),
+            px(center.1 + angle.sin() * radius),
+        ));
+    }
+    builder.close();
 }
 
 fn preview_scroll_delta_y(delta: &ScrollDelta) -> f64 {
