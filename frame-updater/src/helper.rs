@@ -110,13 +110,18 @@ fn process_exists(pid: u32) -> bool {
     use windows::Win32::{
         Foundation::{CloseHandle, WAIT_TIMEOUT},
         System::Threading::{
-            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, SYNCHRONIZE, WaitForSingleObject,
+            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            WaitForSingleObject,
         },
     };
 
-    let Ok(handle) =
-        (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, false, pid) })
-    else {
+    let Ok(handle) = (unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            false,
+            pid,
+        )
+    }) else {
         return false;
     };
     if handle.is_invalid() {

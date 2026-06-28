@@ -1812,11 +1812,11 @@ fn append_env_words(key: &str, suffix: &str) -> OsString {
 
 fn print_posix_gstreamer_env(manifest: &GstreamerManifest, manifest_path: &Path) {
     println!(
-        "export PATH=\"{}:$PATH\"",
+        "export PATH=\"{}:${{PATH:-}}\"",
         shell_escape_path(&manifest.bin_dir)
     );
     println!(
-        "export PKG_CONFIG_PATH=\"{}:$PKG_CONFIG_PATH\"",
+        "export PKG_CONFIG_PATH=\"{}:${{PKG_CONFIG_PATH:-}}\"",
         shell_escape_path(&manifest.pkg_config_dir)
     );
     if manifest.platform != "linux" {
@@ -1827,21 +1827,21 @@ fn print_posix_gstreamer_env(manifest: &GstreamerManifest, manifest_path: &Path)
     }
     if manifest.platform == "linux" {
         println!(
-            "export LD_LIBRARY_PATH=\"{}:$LD_LIBRARY_PATH\"",
+            "export LD_LIBRARY_PATH=\"{}:${{LD_LIBRARY_PATH:-}}\"",
             shell_escape_path(&manifest.lib_dir)
         );
         println!(
-            "export RUSTFLAGS=\"$RUSTFLAGS -C link-arg=-Wl,-rpath,{} -C link-arg=-Wl,--allow-shlib-undefined\"",
+            "export RUSTFLAGS=\"${{RUSTFLAGS:-}} -C link-arg=-Wl,-rpath,{} -C link-arg=-Wl,--allow-shlib-undefined\"",
             shell_escape_path(&manifest.lib_dir)
         );
     }
     if manifest.platform == "macos" {
         println!(
-            "export RUSTFLAGS=\"$RUSTFLAGS -C link-arg=-Wl,-rpath,{}\"",
+            "export RUSTFLAGS=\"${{RUSTFLAGS:-}} -C link-arg=-Wl,-rpath,{}\"",
             shell_escape_path(&manifest.lib_dir)
         );
         println!(
-            "export DYLD_FALLBACK_LIBRARY_PATH=\"{}:$DYLD_FALLBACK_LIBRARY_PATH\"",
+            "export DYLD_FALLBACK_LIBRARY_PATH=\"{}:${{DYLD_FALLBACK_LIBRARY_PATH:-}}\"",
             shell_escape_path(&manifest.lib_dir)
         );
     }

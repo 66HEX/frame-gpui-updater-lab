@@ -61,7 +61,8 @@ case "$target_triple" in
 		;;
 esac
 
-gstreamer_env="$(cd "$repo_root" && cargo xtask setup-gstreamer --platform darwin --arch "$arch_suffix" --mode bundle --install --print-env)"
+(cd "$repo_root" && cargo xtask setup-gstreamer --platform darwin --arch "$arch_suffix" --mode bundle --install)
+gstreamer_env="$(cd "$repo_root" && cargo xtask setup-gstreamer --platform darwin --arch "$arch_suffix" --mode bundle --print-env)"
 eval "$gstreamer_env"
 
 (cd "$repo_root" && cargo xtask setup-ffmpeg --platform darwin --arch "$arch_suffix")
