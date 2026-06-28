@@ -13,6 +13,75 @@ impl Render for PreviewTimelineDragPreview {
     }
 }
 
+struct PreviewTimelineTrackBoundsProbe {
+    owner: Entity<FrameRoot>,
+}
+
+impl IntoElement for PreviewTimelineTrackBoundsProbe {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for PreviewTimelineTrackBoundsProbe {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let style = Style {
+            position: Position::Absolute,
+            size: size(relative(1.0).into(), relative(1.0).into()),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            ..Style::default()
+        };
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        self.owner.update(cx, |root, _cx| {
+            root.set_preview_timeline_track_bounds(bounds);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+}
+
 pub(in crate::app) fn preview_timeline(
     state: &PreviewShellState,
     focuses: PreviewTimecodeInputFocuses<'_>,
@@ -232,6 +301,14 @@ pub(in crate::app) fn preview_timeline_track(
         .w_full()
         .opacity(if enabled { 1.0 } else { 0.5 })
         .when(enabled, |this| this.cursor_pointer())
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|root, event: &MouseDownEvent, _window, cx| {
+                if root.commit_preview_timeline_seek_at_position(event.position) {
+                    cx.notify();
+                }
+            }),
+        )
         .when(enabled, |this| {
             this.on_drag(
                 PreviewTimelineDrag {
@@ -275,6 +352,7 @@ pub(in crate::app) fn preview_timeline_track(
                 .rounded(px(1.0))
                 .bg(color(theme::FOREGROUND)),
         )
+        .child(PreviewTimelineTrackBoundsProbe { owner: cx.entity() })
         .child(
             div()
                 .absolute()
@@ -316,6 +394,9 @@ pub(in crate::app) fn preview_timeline_handle(
         .ml(px(-(PREVIEW_TIMELINE_HANDLE_WIDTH / 2.0)))
         .h(px(PREVIEW_TIMELINE_CONTROL_HEIGHT))
         .w(px(PREVIEW_TIMELINE_HANDLE_WIDTH))
+        .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+            cx.stop_propagation();
+        })
         .when(enabled, |this| this.cursor_ew_resize());
 
     if enabled {

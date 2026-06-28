@@ -683,8 +683,29 @@ mod preview_playback_state {
 
         let end = playback.end_drag();
 
-        assert_eq!(end.command, PlaybackMediaCommand::play());
+        assert_eq!(end.command, PlaybackMediaCommand::seek_and_play(30.0));
         assert_eq!(end.trim, None);
+        assert_eq!(playback.dragging(), None);
+    }
+
+    #[test]
+    fn end_drag_commits_precise_seek_when_scrub_started_paused() {
+        let mut playback = playback_with_media(120.0);
+        let _ = playback.seek_to_percent(0.25);
+
+        let end = playback.end_drag();
+
+        assert_eq!(end.command, PlaybackMediaCommand::seek(30.0));
+        assert_eq!(end.trim, None);
+    }
+
+    #[test]
+    fn seek_once_to_percent_does_not_enter_drag_state() {
+        let mut playback = playback_with_media(120.0);
+
+        let command = playback.seek_once_to_percent(0.25);
+
+        assert_eq!(command, PlaybackMediaCommand::seek(30.0));
         assert_eq!(playback.dragging(), None);
     }
 

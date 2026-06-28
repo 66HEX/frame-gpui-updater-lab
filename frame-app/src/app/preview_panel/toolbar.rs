@@ -97,7 +97,10 @@ pub(in crate::app) fn preview_toolbar(
         )
 }
 
-pub(in crate::app) fn preview_zoom_toolbar(state: &PreviewShellState) -> gpui::Div {
+pub(in crate::app) fn preview_zoom_toolbar(
+    state: &PreviewShellState,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     let enabled = preview_visual_controls_enabled(state);
 
     div()
@@ -110,8 +113,24 @@ pub(in crate::app) fn preview_zoom_toolbar(state: &PreviewShellState) -> gpui::D
         .bg(color(theme::BACKGROUND))
         .p(px(4.0))
         .shadow(card_surface_shadows())
-        .child(preview_tool_button(assets::ICON_MINUS, false, enabled))
-        .child(preview_tool_button(assets::ICON_PLUS, false, enabled))
+        .child(
+            preview_tool_button(assets::ICON_MINUS, false, enabled).on_click(cx.listener(
+                |root, _: &ClickEvent, _window, cx| {
+                    if root.zoom_preview_canvas(PreviewCanvasZoomDirection::Out, cx) {
+                        cx.notify();
+                    }
+                },
+            )),
+        )
+        .child(
+            preview_tool_button(assets::ICON_PLUS, false, enabled).on_click(cx.listener(
+                |root, _: &ClickEvent, _window, cx| {
+                    if root.zoom_preview_canvas(PreviewCanvasZoomDirection::In, cx) {
+                        cx.notify();
+                    }
+                },
+            )),
+        )
 }
 
 pub(in crate::app) fn preview_toolbar_separator() -> gpui::Div {

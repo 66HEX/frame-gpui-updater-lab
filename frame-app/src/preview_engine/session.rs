@@ -23,7 +23,7 @@ impl PreviewSession {
 
         match config.source_kind {
             PreviewSourceKind::Image => {
-                let frame = load_still_image_frame(&config.path, config.transform)?;
+                let frame = load_still_image_frame(&config.path, config.transform, config.crop)?;
                 let dimensions = frame.dimensions();
                 frame_store.publish(frame);
                 Ok(Self {
@@ -39,14 +39,13 @@ impl PreviewSession {
             PreviewSourceKind::Video | PreviewSourceKind::Audio => {
                 let (pipeline, dimensions, duration_seconds) =
                     start_gstreamer_pipeline(&config, frame_store.clone())?;
-                let playing = config.source_kind == PreviewSourceKind::Video;
                 Ok(Self {
                     config,
                     dimensions,
                     duration_seconds: Mutex::new(duration_seconds),
                     frame_store,
                     pipeline: Mutex::new(Some(pipeline)),
-                    playing: Mutex::new(playing),
+                    playing: Mutex::new(false),
                     status: Mutex::new(PreviewSessionStatus::Ready),
                 })
             }
@@ -115,6 +114,9 @@ impl PreviewSession {
         let position = pipeline
             .as_ref()
             .map_or(0.0, RunningPreviewPipeline::position);
+        let playing = pipeline
+            .as_ref()
+            .is_some_and(|pipeline| !pipeline.ended() && *lock(&self.playing));
 
         PreviewSessionSnapshot {
             file_id: self.config.file_id.clone(),
@@ -124,7 +126,7 @@ impl PreviewSession {
             playback: PreviewPlaybackSnapshot {
                 position_seconds: position,
                 duration_seconds: duration,
-                playing: *lock(&self.playing),
+                playing,
             },
             frame_generation: self.frame_store.generation(),
         }

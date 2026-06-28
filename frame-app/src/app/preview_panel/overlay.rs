@@ -108,8 +108,6 @@ pub(in crate::app) fn preview_overlay_layer(
         .top(relative(top as f32))
         .w(relative(width as f32))
         .h(relative(height as f32))
-        .opacity(overlay.opacity.clamp(0.0, 1.0) as f32)
-        .overflow_hidden()
         .when(state.overlay.overlay_mode, |this| {
             this.cursor_grab()
                 .border_1()
@@ -119,9 +117,16 @@ pub(in crate::app) fn preview_overlay_layer(
                 })
         })
         .child(
-            img(PathBuf::from(overlay.path.clone()))
-                .size_full()
-                .object_fit(ObjectFit::Contain),
+            div()
+                .absolute()
+                .inset_0()
+                .overflow_hidden()
+                .opacity(overlay.opacity.clamp(0.0, 1.0) as f32)
+                .child(
+                    img(PathBuf::from(overlay.path.clone()))
+                        .size_full()
+                        .object_fit(ObjectFit::Contain),
+                ),
         );
 
     if state.overlay.overlay_mode {

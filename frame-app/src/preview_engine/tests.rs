@@ -28,6 +28,7 @@ fn session_config_rejects_unpaired_source_dimensions() {
         max_height: DEFAULT_PREVIEW_MAX_HEIGHT,
         fps: DEFAULT_PREVIEW_FPS,
         transform: PreviewTransform::default(),
+        crop: None,
     };
 
     let error = config
@@ -81,7 +82,7 @@ fn load_still_image_frame_converts_rgba_to_bgra_without_alpha_unpremultiply() {
     rgba.save(&path).expect("write test png");
 
     let frame =
-        load_still_image_frame(&path, PreviewTransform::default()).expect("load still frame");
+        load_still_image_frame(&path, PreviewTransform::default(), None).expect("load still frame");
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(frame.bytes(), &[16, 32, 64, 128]);
@@ -101,6 +102,7 @@ fn image_preview_session_publishes_first_frame() {
         max_height: DEFAULT_PREVIEW_MAX_HEIGHT,
         fps: DEFAULT_PREVIEW_FPS,
         transform: PreviewTransform::default(),
+        crop: None,
     };
 
     let session = PreviewSession::start(config).expect("session");
@@ -128,6 +130,7 @@ fn test_preview_session_command_is_noop_without_pipeline() {
         max_height: DEFAULT_PREVIEW_MAX_HEIGHT,
         fps: DEFAULT_PREVIEW_FPS,
         transform: PreviewTransform::default(),
+        crop: None,
     };
     let session = PreviewSession::new_for_test(config);
 

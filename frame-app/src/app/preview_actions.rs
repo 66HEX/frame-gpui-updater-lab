@@ -6,7 +6,7 @@ impl FrameRoot {
         metadata_entry: &SourceMetadataEntry,
     ) -> Option<PreviewRuntimeRequest> {
         let selected_file = self.file_queue.selected_file()?;
-        preview_runtime_request(selected_file, metadata_entry)
+        preview_runtime_request(selected_file, metadata_entry, !self.preview_ui.crop_mode)
     }
 
     pub(super) fn sync_preview_runtime_for_selection(
@@ -69,6 +69,164 @@ impl FrameRoot {
 
     pub(super) fn preview_runtime_error(&self) -> Option<String> {
         self.preview_ui.runtime_error.clone()
+    }
+
+    pub(super) fn sync_preview_canvas_for_selection(&mut self, selected_file_id: Option<&str>) {
+        if self.preview_ui.canvas_file_id.as_deref() == selected_file_id {
+            return;
+        }
+
+        self.preview_ui.canvas_file_id = selected_file_id.map(str::to_string);
+        self.preview_ui.canvas = PreviewCanvasState::default();
+        self.preview_ui.canvas_pan_drag = None;
+    }
+
+    pub(super) fn preview_canvas_render_state(&self) -> PreviewCanvasRenderState {
+        let (viewport_width, viewport_height) =
+            self.preview_ui.canvas_bounds.map_or((0.0, 0.0), |bounds| {
+                (
+                    f64::from(bounds.size.width.as_f32()),
+                    f64::from(bounds.size.height.as_f32()),
+                )
+            });
+        PreviewCanvasRenderState {
+            zoom: self.preview_ui.canvas.current_zoom,
+            pan_x: self.preview_ui.canvas.current_pan_x,
+            pan_y: self.preview_ui.canvas.current_pan_y,
+            viewport_width,
+            viewport_height,
+        }
+    }
+
+    pub(super) fn zoom_preview_canvas(
+        &mut self,
+        direction: PreviewCanvasZoomDirection,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let multiplier = match direction {
+            PreviewCanvasZoomDirection::In => PREVIEW_CANVAS_ZOOM_STEP,
+            PreviewCanvasZoomDirection::Out => 1.0 / PREVIEW_CANVAS_ZOOM_STEP,
+        };
+        let current_zoom = self.preview_ui.canvas.target_zoom;
+        let next_zoom = clamp_preview_canvas_zoom(current_zoom * multiplier);
+        if (next_zoom - current_zoom).abs() <= f64::EPSILON {
+            return false;
+        }
+
+        let zoom_ratio = if current_zoom > f64::EPSILON {
+            next_zoom / current_zoom
+        } else {
+            1.0
+        };
+        let target_pan_x = self.preview_ui.canvas.target_pan_x * zoom_ratio;
+        let target_pan_y = self.preview_ui.canvas.target_pan_y * zoom_ratio;
+        let (target_pan_x, target_pan_y) =
+            self.clamp_preview_canvas_pan_for_state(target_pan_x, target_pan_y, next_zoom);
+
+        self.preview_ui.canvas.target_zoom = next_zoom;
+        self.preview_ui.canvas.target_pan_x = target_pan_x;
+        self.preview_ui.canvas.target_pan_y = target_pan_y;
+        self.schedule_preview_frame_tick(cx);
+        true
+    }
+
+    pub(super) fn apply_preview_canvas_pan_drag(
+        &mut self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if bounds.size.width.as_f32() <= 0.0 || bounds.size.height.as_f32() <= 0.0 {
+            return false;
+        }
+
+        let drag_state = match self.preview_ui.canvas_pan_drag {
+            Some(state) => state,
+            None => {
+                let state = PreviewCanvasPanDragState {
+                    start_position: position,
+                    start_pan_x: self.preview_ui.canvas.target_pan_x,
+                    start_pan_y: self.preview_ui.canvas.target_pan_y,
+                };
+                self.preview_ui.canvas_pan_drag = Some(state);
+                state
+            }
+        };
+
+        let delta_x = f64::from((position.x - drag_state.start_position.x).as_f32());
+        let delta_y = f64::from((position.y - drag_state.start_position.y).as_f32());
+        let (next_pan_x, next_pan_y) = self.clamp_preview_canvas_pan_for_state(
+            drag_state.start_pan_x + delta_x,
+            drag_state.start_pan_y + delta_y,
+            self.preview_ui.canvas.target_zoom,
+        );
+        let changed = (next_pan_x - self.preview_ui.canvas.target_pan_x).abs() > f64::EPSILON
+            || (next_pan_y - self.preview_ui.canvas.target_pan_y).abs() > f64::EPSILON;
+
+        self.preview_ui.canvas.target_pan_x = next_pan_x;
+        self.preview_ui.canvas.target_pan_y = next_pan_y;
+        if changed {
+            self.schedule_preview_frame_tick(cx);
+        }
+        changed
+    }
+
+    pub(super) fn end_preview_canvas_pan_drag(&mut self) -> bool {
+        let had_drag = self.preview_ui.canvas_pan_drag.is_some();
+        self.preview_ui.canvas_pan_drag = None;
+        had_drag
+    }
+
+    pub(in crate::app) fn set_preview_canvas_bounds(&mut self, bounds: Bounds<Pixels>) {
+        self.preview_ui.canvas_bounds = Some(bounds);
+    }
+
+    fn clamp_preview_canvas_pan_for_state(&self, pan_x: f64, pan_y: f64, zoom: f64) -> (f64, f64) {
+        let Some(bounds) = self.preview_ui.canvas_bounds else {
+            return (0.0, 0.0);
+        };
+        let Some((media_width, media_height)) = self.preview_canvas_media_dimensions() else {
+            return (0.0, 0.0);
+        };
+        let Some((max_x, max_y)) = preview_canvas_pan_limits(
+            f64::from(bounds.size.width.as_f32()),
+            f64::from(bounds.size.height.as_f32()),
+            media_width,
+            media_height,
+            zoom,
+        ) else {
+            return (0.0, 0.0);
+        };
+
+        (pan_x.clamp(-max_x, max_x), pan_y.clamp(-max_y, max_y))
+    }
+
+    fn preview_canvas_media_dimensions(&self) -> Option<(f64, f64)> {
+        let size = self.preview_ui.render_image.as_ref()?.size(0);
+        let width = f64::from(size.width.0);
+        let height = f64::from(size.height.0);
+        (width > 0.0 && height > 0.0).then_some((width, height))
+    }
+
+    fn tick_preview_canvas_animation(&mut self) -> bool {
+        let (next_zoom, zoom_changed) = lerp_preview_canvas_value(
+            self.preview_ui.canvas.current_zoom,
+            self.preview_ui.canvas.target_zoom,
+        );
+        let (next_pan_x, pan_x_changed) = lerp_preview_canvas_value(
+            self.preview_ui.canvas.current_pan_x,
+            self.preview_ui.canvas.target_pan_x,
+        );
+        let (next_pan_y, pan_y_changed) = lerp_preview_canvas_value(
+            self.preview_ui.canvas.current_pan_y,
+            self.preview_ui.canvas.target_pan_y,
+        );
+
+        self.preview_ui.canvas.current_zoom = next_zoom;
+        self.preview_ui.canvas.current_pan_x = next_pan_x;
+        self.preview_ui.canvas.current_pan_y = next_pan_y;
+
+        zoom_changed || pan_x_changed || pan_y_changed
     }
 
     pub(super) fn sync_preview_playback_for_selection(
@@ -182,13 +340,19 @@ impl FrameRoot {
                     .await;
                 let keep_ticking = this
                     .update(cx, |root, cx| {
+                        let canvas_changed = root.tick_preview_canvas_animation();
                         if root.preview_ui.session.is_none() {
+                            if canvas_changed {
+                                cx.notify();
+                                return true;
+                            }
                             root.preview_ui.frame_tick_active = false;
                             return false;
                         }
 
                         if root.refresh_preview_render_image()
                             || root.preview_ui.playback.is_playing()
+                            || canvas_changed
                         {
                             cx.notify();
                         }
@@ -829,6 +993,9 @@ impl FrameRoot {
             if !self.preview_ui.playback.begin_handle_drag(target) {
                 return false;
             }
+            if self.preview_ui.playback.is_playing() {
+                self.apply_preview_media_command(PlaybackMediaCommand::pause(), true);
+            }
         }
 
         let update = self.preview_ui.playback.drag_to_percent(percent);
@@ -841,6 +1008,26 @@ impl FrameRoot {
         }
 
         true
+    }
+
+    pub(in crate::app) fn set_preview_timeline_track_bounds(&mut self, bounds: Bounds<Pixels>) {
+        self.preview_ui.timeline_track_bounds = Some(bounds);
+    }
+
+    pub(super) fn commit_preview_timeline_seek_at_position(
+        &mut self,
+        position: Point<Pixels>,
+    ) -> bool {
+        let Some(bounds) = self.preview_ui.timeline_track_bounds else {
+            return false;
+        };
+        if !self.preview_timeline_enabled() {
+            return false;
+        }
+
+        let percent = timeline_slider_percent_from_bounds(position, bounds);
+        let command = self.preview_ui.playback.seek_once_to_percent(percent);
+        self.apply_preview_media_command(command, true)
     }
 
     pub(super) fn end_preview_timeline_drag(&mut self) -> bool {
@@ -947,6 +1134,7 @@ impl FrameRoot {
 fn preview_runtime_request(
     selected_file: &FileItem,
     metadata_entry: &SourceMetadataEntry,
+    include_applied_crop: bool,
 ) -> Option<PreviewRuntimeRequest> {
     if metadata_entry.status != MetadataStatus::Ready {
         return None;
@@ -957,6 +1145,9 @@ fn preview_runtime_request(
     let duration_seconds = preview_duration_seconds(Some(metadata));
     let (source_width, source_height) = valid_preview_dimensions(metadata.width, metadata.height);
     let transform = preview_transform_from_config(&selected_file.config);
+    let crop = include_applied_crop
+        .then(|| preview_crop_from_config(&selected_file.config, source_kind))
+        .flatten();
     let key = PreviewRuntimeKey {
         file_id: selected_file.id.clone(),
         path: selected_file.path.clone(),
@@ -967,6 +1158,7 @@ fn preview_runtime_request(
         rotation_degrees: transform.rotation_degrees,
         flip_horizontal: transform.flip_horizontal,
         flip_vertical: transform.flip_vertical,
+        crop,
     };
     let config = PreviewSessionConfig {
         file_id: key.file_id.clone(),
@@ -979,6 +1171,7 @@ fn preview_runtime_request(
         max_height: DEFAULT_PREVIEW_MAX_HEIGHT,
         fps: DEFAULT_PREVIEW_FPS,
         transform,
+        crop,
     };
 
     Some(PreviewRuntimeRequest { key, config })
@@ -990,6 +1183,23 @@ fn preview_transform_from_config(config: &ConversionConfig) -> PreviewTransform 
         flip_horizontal: config.flip_horizontal,
         flip_vertical: config.flip_vertical,
     }
+}
+
+fn preview_crop_from_config(
+    config: &ConversionConfig,
+    source_kind: EnginePreviewSourceKind,
+) -> Option<EnginePreviewCrop> {
+    if source_kind == EnginePreviewSourceKind::Audio {
+        return None;
+    }
+
+    let crop = config.crop.as_ref()?;
+    (crop.enabled && crop.width > 0 && crop.height > 0).then_some(EnginePreviewCrop {
+        x: crop.x,
+        y: crop.y,
+        width: crop.width,
+        height: crop.height,
+    })
 }
 
 fn engine_source_kind(metadata: &SourceMetadata) -> EnginePreviewSourceKind {
@@ -1042,4 +1252,76 @@ fn valid_preview_dimensions(width: Option<u32>, height: Option<u32>) -> (Option<
         }
         _ => (None, None),
     }
+}
+
+pub(in crate::app) fn clamp_preview_canvas_zoom(value: f64) -> f64 {
+    value.clamp(PREVIEW_CANVAS_MIN_ZOOM, PREVIEW_CANVAS_MAX_ZOOM)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::app) struct PreviewCanvasLayoutMetrics {
+    pub(in crate::app) width: f64,
+    pub(in crate::app) height: f64,
+    pub(in crate::app) left: f64,
+    pub(in crate::app) top: f64,
+}
+
+pub(in crate::app) fn preview_canvas_layout_metrics(
+    viewport_width: f64,
+    viewport_height: f64,
+    media_width: f64,
+    media_height: f64,
+    zoom: f64,
+    pan_x: f64,
+    pan_y: f64,
+) -> Option<PreviewCanvasLayoutMetrics> {
+    if viewport_width <= 0.0 || viewport_height <= 0.0 || media_width <= 0.0 || media_height <= 0.0
+    {
+        return None;
+    }
+
+    let fit_scale = (viewport_width / media_width).min(viewport_height / media_height);
+    if !fit_scale.is_finite() || fit_scale <= 0.0 {
+        return None;
+    }
+
+    let width = media_width * fit_scale * zoom;
+    let height = media_height * fit_scale * zoom;
+    Some(PreviewCanvasLayoutMetrics {
+        width,
+        height,
+        left: (viewport_width / 2.0) + pan_x - (width / 2.0),
+        top: (viewport_height / 2.0) + pan_y - (height / 2.0),
+    })
+}
+
+pub(in crate::app) fn preview_canvas_pan_limits(
+    viewport_width: f64,
+    viewport_height: f64,
+    media_width: f64,
+    media_height: f64,
+    zoom: f64,
+) -> Option<(f64, f64)> {
+    let metrics = preview_canvas_layout_metrics(
+        viewport_width,
+        viewport_height,
+        media_width,
+        media_height,
+        zoom,
+        0.0,
+        0.0,
+    )?;
+    Some((
+        (viewport_width * PREVIEW_CANVAS_MAX_PAN).max(metrics.width) / 2.0,
+        (viewport_height * PREVIEW_CANVAS_MAX_PAN).max(metrics.height) / 2.0,
+    ))
+}
+
+pub(in crate::app) fn lerp_preview_canvas_value(current: f64, target: f64) -> (f64, bool) {
+    let distance = target - current;
+    if distance.abs() <= PREVIEW_CANVAS_SNAP_EPSILON {
+        return (target, (target - current).abs() > f64::EPSILON);
+    }
+
+    (current + distance * PREVIEW_CANVAS_LERP_FACTOR, true)
 }

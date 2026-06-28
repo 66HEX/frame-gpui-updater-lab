@@ -323,6 +323,17 @@ impl PreviewPlaybackState {
     }
 
     #[must_use]
+    pub fn seek_once_to_percent(&mut self, percent: f64) -> PlaybackMediaCommand {
+        if self.is_image {
+            return PlaybackMediaCommand::none();
+        }
+
+        let time = self.time_from_slider_percent(percent);
+        self.current_time = time;
+        PlaybackMediaCommand::seek(time)
+    }
+
+    #[must_use]
     pub fn drag_to_percent(&mut self, percent: f64) -> TimelineDragUpdate {
         if self.is_image {
             return TimelineDragUpdate {
@@ -366,12 +377,15 @@ impl PreviewPlaybackState {
 
     #[must_use]
     pub fn end_drag(&mut self) -> TimelineDragEnd {
-        let command =
-            if self.dragging == Some(TimelineDragTarget::Scrub) && self.was_playing_before_scrub {
-                PlaybackMediaCommand::play()
+        let command = if self.dragging == Some(TimelineDragTarget::Scrub) {
+            if self.was_playing_before_scrub {
+                PlaybackMediaCommand::seek_and_play(self.current_time)
             } else {
-                PlaybackMediaCommand::none()
-            };
+                PlaybackMediaCommand::seek(self.current_time)
+            }
+        } else {
+            PlaybackMediaCommand::none()
+        };
         let trim = if self
             .dragging
             .is_some_and(|target| target != TimelineDragTarget::Scrub)

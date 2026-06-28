@@ -1,4 +1,7 @@
 use super::input::{should_capture_text_input_drag, should_handle_text_input};
+use super::preview_actions::{
+    lerp_preview_canvas_value, preview_canvas_layout_metrics, preview_canvas_pan_limits,
+};
 use super::preview_panel::{
     centered_offset, preview_shell_state, preview_timeline_labels, preview_trim_enabled,
     preview_visual_controls_visible, timeline_fraction_from_percent,
@@ -1002,6 +1005,34 @@ mod frame_root_config {
     }
 
     #[test]
+    fn apply_preview_timeline_handle_drag_pauses_active_playback() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("video", "/tmp/one.mp4", 1));
+        root.source_metadata.mark_ready(
+            "video".to_string(),
+            SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                duration: Some("90.0".to_string()),
+                ..SourceMetadata::default()
+            },
+        );
+        root.preview_ui.playback =
+            preview_playback_state(PreviewMediaKind::Video, 90.0, None, None);
+        root.preview_ui.playback.handle_play();
+
+        assert!(root.apply_preview_timeline_drag(TimelineDragTarget::End, 0.75));
+
+        assert!(!root.preview_ui.playback.is_playing());
+        assert_eq!(
+            root.file_queue
+                .file_by_id("video")
+                .and_then(|file| file.config.end_time.as_deref()),
+            Some("00:01:07.500")
+        );
+    }
+
+    #[test]
     fn apply_preview_timeline_drag_preserves_gap_when_end_moves_before_start() {
         let mut root = FrameRoot::new();
         root.file_queue
@@ -1055,6 +1086,32 @@ mod frame_root_config {
                 .and_then(|file| file.config.start_time.as_deref()),
             None
         );
+    }
+
+    #[test]
+    fn commit_preview_timeline_seek_at_position_updates_local_playhead() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("video", "/tmp/one.mp4", 1));
+        root.source_metadata.mark_ready(
+            "video".to_string(),
+            SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                duration: Some("90.0".to_string()),
+                ..SourceMetadata::default()
+            },
+        );
+        root.preview_ui.playback =
+            preview_playback_state(PreviewMediaKind::Video, 90.0, None, None);
+        root.set_preview_timeline_track_bounds(Bounds {
+            origin: point(px(10.0), px(0.0)),
+            size: size(px(100.0), px(30.0)),
+        });
+
+        let changed = root.commit_preview_timeline_seek_at_position(point(px(60.0), px(0.0)));
+
+        assert!(changed);
+        assert_eq!(root.preview_ui.playback.current_time(), 45.0);
     }
 
     #[test]
@@ -1235,6 +1292,32 @@ mod frame_root_config {
                 .and_then(|file| file.config.crop.as_ref()),
             None
         );
+    }
+
+    #[test]
+    fn sync_preview_canvas_for_selection_resets_canvas_when_file_changes() {
+        let mut root = FrameRoot::new();
+        root.sync_preview_canvas_for_selection(Some("first"));
+        root.preview_ui.canvas.current_zoom = 2.0;
+        root.preview_ui.canvas.target_zoom = 3.0;
+        root.preview_ui.canvas.current_pan_x = 0.5;
+        root.preview_ui.canvas.target_pan_y = -0.5;
+
+        root.sync_preview_canvas_for_selection(Some("first"));
+
+        assert_eq!(root.preview_ui.canvas.current_zoom, 2.0);
+
+        root.sync_preview_canvas_for_selection(Some("second"));
+
+        assert_eq!(root.preview_ui.canvas, PreviewCanvasState::default());
+    }
+
+    #[test]
+    fn lerp_preview_canvas_value_moves_toward_target_without_overshooting() {
+        let (next, changed) = lerp_preview_canvas_value(1.0, 2.0);
+
+        assert!(changed);
+        assert!(next > 1.0 && next < 2.0);
     }
 
     #[test]
@@ -1754,6 +1837,7 @@ mod preview_shell {
             settings_state(&config, Some(&metadata), MetadataStatus::Ready),
             crop_state(),
             PreviewOverlayRenderState::empty(),
+            PreviewCanvasRenderState::default(),
             preview_playback_state(PreviewMediaKind::Video, 90.4, None, None),
             None,
             None,
@@ -1786,6 +1870,7 @@ mod preview_shell {
             settings_state(&config, Some(&metadata), MetadataStatus::Ready),
             crop_state(),
             PreviewOverlayRenderState::empty(),
+            PreviewCanvasRenderState::default(),
             preview_playback_state(
                 PreviewMediaKind::Video,
                 90.4,
@@ -1817,6 +1902,7 @@ mod preview_shell {
             settings_state(&config, Some(&metadata), MetadataStatus::Ready),
             crop_state(),
             PreviewOverlayRenderState::empty(),
+            PreviewCanvasRenderState::default(),
             PreviewPlaybackState::new(false),
             None,
             None,
@@ -1844,6 +1930,7 @@ mod preview_shell {
             settings_state(&config, Some(&metadata), MetadataStatus::Ready),
             crop_state(),
             PreviewOverlayRenderState::empty(),
+            PreviewCanvasRenderState::default(),
             PreviewPlaybackState::new(false),
             None,
             None,
@@ -1869,6 +1956,7 @@ mod preview_shell {
             settings_state(&config, Some(&metadata), MetadataStatus::Loading),
             crop_state(),
             PreviewOverlayRenderState::empty(),
+            PreviewCanvasRenderState::default(),
             PreviewPlaybackState::new(false),
             None,
             None,
@@ -1910,6 +1998,25 @@ mod preview_shell {
             timeline_slider_percent_from_bounds(point(px(140.0), px(0.0)), bounds),
             1.0
         );
+    }
+
+    #[test]
+    fn preview_canvas_layout_metrics_preserve_media_aspect_when_zooming() {
+        let metrics = preview_canvas_layout_metrics(1000.0, 500.0, 1920.0, 1080.0, 1.18, 0.0, 0.0)
+            .expect("metrics");
+
+        assert!(((metrics.width / metrics.height) - (16.0 / 9.0)).abs() < 0.000_001);
+        assert!(metrics.width > 1000.0);
+        assert!((metrics.top - -45.0).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn preview_canvas_pan_limits_allow_original_overscroll_window() {
+        let (max_x, max_y) =
+            preview_canvas_pan_limits(1000.0, 500.0, 1920.0, 1080.0, 0.25).expect("limits");
+
+        assert_eq!(max_x, 1000.0);
+        assert_eq!(max_y, 500.0);
     }
 
     #[test]

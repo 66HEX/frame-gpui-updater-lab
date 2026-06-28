@@ -33,6 +33,7 @@ impl Render for FrameRoot {
             &selected_config_snapshot,
             cx,
         );
+        self.sync_preview_canvas_for_selection(selected_file_id.as_deref());
         self.sync_preview_runtime_for_selection(preview_runtime_request, cx);
         self.sync_preview_playback_for_selection(
             selected_file_id.as_deref(),
@@ -42,6 +43,7 @@ impl Render for FrameRoot {
         let preview_crop =
             self.preview_crop_render_state(source_metadata.as_ref(), &selected_config_snapshot);
         let preview_overlay = self.preview_overlay_render_state();
+        let preview_canvas = self.preview_canvas_render_state();
         let preview_playback = self.preview_playback_state();
         let preview_render_image = self.preview_render_image();
         let preview_runtime_error = self.preview_runtime_error();
@@ -122,6 +124,7 @@ impl Render for FrameRoot {
                         available_encoders: &self.available_encoders,
                     },
                     PreviewPanelProps {
+                        canvas: preview_canvas,
                         crop: preview_crop,
                         overlay: preview_overlay,
                         timecode_focuses: PreviewTimecodeInputFocuses {

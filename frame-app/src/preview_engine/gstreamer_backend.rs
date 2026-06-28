@@ -28,6 +28,7 @@ pub struct RunningPreviewPipeline {
     fps: u32,
     stop_requested: Arc<AtomicBool>,
     pause_after_next_frame: Arc<AtomicBool>,
+    eos_reached: Arc<AtomicBool>,
     clock_generation: Arc<AtomicU64>,
     worker: Option<JoinHandle<()>>,
     bus_worker: Option<JoinHandle<()>>,
@@ -45,6 +46,7 @@ impl RunningPreviewPipeline {
 
     pub fn resume(&self) -> Result<(), PreviewEngineError> {
         self.reset_clock();
+        self.eos_reached.store(false, Ordering::SeqCst);
         self.set_audio_muted(false);
         self.pipeline
             .set_state(gst::State::Playing)
@@ -62,6 +64,7 @@ impl RunningPreviewPipeline {
         let resume_for_seek_frame = resume_after_seek_frame && self.worker.is_some();
 
         self.reset_clock();
+        self.eos_reached.store(false, Ordering::SeqCst);
         if resume_for_seek_frame {
             self.set_audio_muted(true);
             self.pause_after_next_frame.store(true, Ordering::SeqCst);
@@ -106,6 +109,11 @@ impl RunningPreviewPipeline {
             .map_or(0.0, |duration| duration.nseconds() as f64 / 1_000_000_000.0)
     }
 
+    #[must_use]
+    pub fn ended(&self) -> bool {
+        self.eos_reached.load(Ordering::SeqCst)
+    }
+
     pub fn stop(&mut self) {
         self.stop_requested.store(true, Ordering::SeqCst);
         self.set_audio_muted(true);
@@ -119,14 +127,14 @@ impl RunningPreviewPipeline {
         }
     }
 
-    fn reset_clock(&self) {
-        self.clock_generation.fetch_add(1, Ordering::SeqCst);
-    }
-
     fn set_audio_muted(&self, muted: bool) {
         if let Some(volume) = &self.audio_volume {
             volume.set_property("mute", muted);
         }
+    }
+
+    fn reset_clock(&self) {
+        self.clock_generation.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -162,7 +170,11 @@ pub fn start_gstreamer_pipeline(
     let stop_requested = Arc::new(AtomicBool::new(false));
     let bus_stop = Arc::clone(&stop_requested);
     let pause_after_next_frame = Arc::new(AtomicBool::new(false));
+    if appsink.is_some() {
+        pause_after_next_frame.store(true, Ordering::SeqCst);
+    }
     let clock_generation = Arc::new(AtomicU64::new(0));
+    let eos_reached = Arc::new(AtomicBool::new(false));
     let bus = pipeline
         .bus()
         .ok_or_else(|| PreviewEngineError::Gstreamer("preview pipeline has no bus".to_string()))?;
@@ -191,7 +203,7 @@ pub fn start_gstreamer_pipeline(
             )
         })
         .transpose()?;
-    let bus_worker = spawn_bus_worker(bus, bus_stop)?;
+    let bus_worker = spawn_bus_worker(bus, bus_stop, Arc::clone(&eos_reached))?;
     let duration = normalize_duration(
         pipeline
             .query_duration::<gst::ClockTime>()
@@ -207,6 +219,7 @@ pub fn start_gstreamer_pipeline(
             fps: config.fps,
             stop_requested,
             pause_after_next_frame,
+            eos_reached,
             clock_generation,
             worker,
             bus_worker: Some(bus_worker),
@@ -264,6 +277,7 @@ fn spawn_frame_worker(
 fn spawn_bus_worker(
     bus: gst::Bus,
     stop_requested: Arc<AtomicBool>,
+    eos_reached: Arc<AtomicBool>,
 ) -> Result<JoinHandle<()>, PreviewEngineError> {
     thread::Builder::new()
         .name("frame-preview-gstreamer-bus".to_string())
@@ -275,7 +289,10 @@ fn spawn_bus_worker(
 
                 use gst::MessageView;
                 match message.view() {
-                    MessageView::Error(_) | MessageView::Eos(_) => break,
+                    MessageView::Error(_) => break,
+                    MessageView::Eos(_) => {
+                        eos_reached.store(true, Ordering::SeqCst);
+                    }
                     _ => {}
                 }
             }
@@ -287,8 +304,13 @@ fn build_pipeline(
     config: &PreviewSessionConfig,
     dimensions: PreviewDimensions,
 ) -> Result<gst::Pipeline, PreviewEngineError> {
-    let description =
-        build_pipeline_description(dimensions, config.fps, config.source_kind, config.transform);
+    let description = build_pipeline_description(
+        dimensions,
+        config.fps,
+        config.source_kind,
+        config.transform,
+        pipeline_crop(config),
+    );
     let element = gst::parse::launch(&description)
         .map_err(|err| PreviewEngineError::Gstreamer(format!("invalid preview pipeline: {err}")))?;
     let pipeline = element.downcast::<gst::Pipeline>().map_err(|_| {
@@ -308,6 +330,7 @@ fn build_pipeline_description(
     fps: u32,
     source_kind: PreviewSourceKind,
     transform: PreviewTransform,
+    crop: Option<PreviewPipelineCrop>,
 ) -> String {
     let audio_branch = "preview_decode. ! queue max-size-buffers=8 max-size-bytes=0 max-size-time=0 ! audioconvert ! audioresample ! volume name=preview_audio_volume mute=true ! autoaudiosink name=preview_audio_sink sync=true";
 
@@ -318,10 +341,41 @@ fn build_pipeline_description(
     }
 
     let transform_branch = gstreamer_transform_branch(transform);
+    let crop_branch = gstreamer_crop_branch(crop);
     format!(
-        "filesrc name=preview_src ! decodebin name=preview_decode force-sw-decoders=true preview_decode. ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! {transform_branch}videoscale ! videorate drop-only=true ! video/x-raw,format=BGRA,width={},height={},framerate={}/1 ! appsink name=preview_sink emit-signals=false sync=false max-buffers=1 drop=true wait-on-eos=false {audio_branch}",
+        "filesrc name=preview_src ! decodebin name=preview_decode force-sw-decoders=true preview_decode. ! queue max-size-buffers=8 max-size-bytes=0 max-size-time=0 ! videoconvert ! {transform_branch}{crop_branch}videoscale ! videorate drop-only=true ! video/x-raw,format=BGRA,width={},height={},framerate={}/1 ! appsink name=preview_sink emit-signals=false sync=false max-buffers=2 drop=false wait-on-eos=false {audio_branch}",
         dimensions.width, dimensions.height, fps
     )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PreviewPipelineCrop {
+    left: u32,
+    top: u32,
+    right: u32,
+    bottom: u32,
+}
+
+fn pipeline_crop(config: &PreviewSessionConfig) -> Option<PreviewPipelineCrop> {
+    let crop = config.crop?;
+    let source = config.transformed_source_dimensions()?;
+    let right_edge = crop.x.checked_add(crop.width)?;
+    let bottom_edge = crop.y.checked_add(crop.height)?;
+    Some(PreviewPipelineCrop {
+        left: crop.x,
+        top: crop.y,
+        right: source.width.checked_sub(right_edge)?,
+        bottom: source.height.checked_sub(bottom_edge)?,
+    })
+}
+
+fn gstreamer_crop_branch(crop: Option<PreviewPipelineCrop>) -> String {
+    crop.map_or_else(String::new, |crop| {
+        format!(
+            "videocrop left={} top={} right={} bottom={} ! ",
+            crop.left, crop.top, crop.right, crop.bottom
+        )
+    })
 }
 
 fn gstreamer_transform_branch(transform: PreviewTransform) -> String {
@@ -359,28 +413,6 @@ fn frame_from_sample(sample: &gst::Sample) -> Option<PreviewFrame> {
         payload,
     )
     .ok()
-}
-
-fn tight_bgra_payload(data: &[u8], width: u32, height: u32, stride: u32) -> Option<Vec<u8>> {
-    let row_len = usize::try_from(width.checked_mul(4)?).ok()?;
-    let height = usize::try_from(height).ok()?;
-    let stride = usize::try_from(stride).ok()?;
-    if stride < row_len {
-        return None;
-    }
-
-    if stride == row_len {
-        let len = row_len.checked_mul(height)?;
-        return data.get(0..len).map(<[u8]>::to_vec);
-    }
-
-    let mut payload = Vec::with_capacity(row_len.checked_mul(height)?);
-    for row in 0..height {
-        let start = row.checked_mul(stride)?;
-        let end = start.checked_add(row_len)?;
-        payload.extend_from_slice(data.get(start..end)?);
-    }
-    Some(payload)
 }
 
 struct PlaybackClock {
@@ -424,6 +456,28 @@ impl PlaybackClock {
         self.base_pts_us = Some(pts_us);
         self.base_instant = Instant::now();
     }
+}
+
+fn tight_bgra_payload(data: &[u8], width: u32, height: u32, stride: u32) -> Option<Vec<u8>> {
+    let row_len = usize::try_from(width.checked_mul(4)?).ok()?;
+    let height = usize::try_from(height).ok()?;
+    let stride = usize::try_from(stride).ok()?;
+    if stride < row_len {
+        return None;
+    }
+
+    if stride == row_len {
+        let len = row_len.checked_mul(height)?;
+        return data.get(0..len).map(<[u8]>::to_vec);
+    }
+
+    let mut payload = Vec::with_capacity(row_len.checked_mul(height)?);
+    for row in 0..height {
+        let start = row.checked_mul(stride)?;
+        let end = start.checked_add(row_len)?;
+        payload.extend_from_slice(data.get(start..end)?);
+    }
+    Some(payload)
 }
 
 fn preview_seek_flags(precise: bool) -> gst::SeekFlags {
@@ -504,11 +558,12 @@ mod tests {
             30,
             PreviewSourceKind::Video,
             PreviewTransform::default(),
+            None,
         );
 
         assert!(description.contains("video/x-raw,format=BGRA"));
-        assert!(description.contains("leaky=downstream"));
-        assert!(description.contains("max-buffers=1 drop=true"));
+        assert!(!description.contains("leaky=downstream"));
+        assert!(description.contains("sync=false max-buffers=2 drop=false"));
     }
 
     #[test]
@@ -521,6 +576,7 @@ mod tests {
             30,
             PreviewSourceKind::Audio,
             PreviewTransform::default(),
+            None,
         );
 
         assert!(description.contains("audioconvert"));
@@ -557,6 +613,7 @@ mod tests {
             max_height: 720,
             fps: 30,
             transform: PreviewTransform::default(),
+            crop: None,
         };
 
         let pipeline = build_pipeline(&config, config.target_dimensions()).expect("pipeline");
@@ -583,11 +640,42 @@ mod tests {
                 flip_horizontal: true,
                 flip_vertical: true,
             },
+            None,
         );
 
         let hflip = description.find("horizontal-flip").expect("hflip");
         let vflip = description.find("vertical-flip").expect("vflip");
         let rotate = description.find("clockwise").expect("rotate");
         assert!(hflip < vflip && vflip < rotate);
+    }
+
+    #[test]
+    fn build_pipeline_description_crops_after_transform_before_scaling() {
+        let description = build_pipeline_description(
+            PreviewDimensions {
+                width: 640,
+                height: 360,
+            },
+            30,
+            PreviewSourceKind::Video,
+            PreviewTransform {
+                rotation_degrees: 90,
+                flip_horizontal: false,
+                flip_vertical: false,
+            },
+            Some(PreviewPipelineCrop {
+                left: 10,
+                top: 20,
+                right: 30,
+                bottom: 40,
+            }),
+        );
+
+        let rotate = description.find("clockwise").expect("rotate");
+        let crop = description.find("videocrop").expect("crop");
+        let scale = description.find("videoscale").expect("scale");
+
+        assert!(rotate < crop && crop < scale);
+        assert!(description.contains("left=10 top=20 right=30 bottom=40"));
     }
 }

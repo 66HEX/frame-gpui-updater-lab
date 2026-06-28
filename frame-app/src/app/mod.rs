@@ -25,12 +25,12 @@ use chrome::{app_settings_sheet, drag_drop_overlay, titlebar};
 use input::{FrameTextInputKind, FrameTextInputUiState};
 use logs_panel::logs_view;
 use preview_panel::{
-    FlipAxis, PreviewCropRenderState, PreviewMediaRenderState, PreviewOverlayRenderState,
-    PreviewPanelProps, PreviewTimecodeInputFocuses, crop_aspect_id, crop_rect_from_settings,
-    crop_rect_is_full, crop_settings_from_rect, default_crop_rect, full_crop_rect,
-    is_known_crop_aspect, is_side_rotation, next_rotation, preview_crop_controls_enabled,
-    preview_crop_source_dimensions, preview_duration_seconds, preview_playback_state,
-    preview_source_media_kind, preview_transform_controls_enabled,
+    FlipAxis, PreviewCanvasRenderState, PreviewCropRenderState, PreviewMediaRenderState,
+    PreviewOverlayRenderState, PreviewPanelProps, PreviewTimecodeInputFocuses, crop_aspect_id,
+    crop_rect_from_settings, crop_rect_is_full, crop_settings_from_rect, default_crop_rect,
+    full_crop_rect, is_known_crop_aspect, is_side_rotation, next_rotation,
+    preview_crop_controls_enabled, preview_crop_source_dimensions, preview_duration_seconds,
+    preview_playback_state, preview_source_media_kind, preview_transform_controls_enabled,
     timeline_slider_percent_from_bounds,
 };
 use primitives::color;
@@ -84,8 +84,9 @@ use crate::{
     },
     preview_engine::{
         DEFAULT_PREVIEW_FPS, DEFAULT_PREVIEW_MAX_HEIGHT, DEFAULT_PREVIEW_MAX_WIDTH,
-        MIN_PREVIEW_DIMENSION, PreviewCommand, PreviewSession, PreviewSessionConfig,
-        PreviewSourceKind as EnginePreviewSourceKind, PreviewTransform, render_image_from_frame,
+        MIN_PREVIEW_DIMENSION, PreviewCommand, PreviewCrop as EnginePreviewCrop, PreviewSession,
+        PreviewSessionConfig, PreviewSourceKind as EnginePreviewSourceKind, PreviewTransform,
+        render_image_from_frame,
     },
     settings::{
         ConversionConfig, CropSettings, DEFAULT_SUBTITLE_FONT_COLOR,
@@ -198,6 +199,12 @@ const TEXT_INPUT_CARET_WIDTH: f32 = 1.5;
 const TEXT_INPUT_CARET_HEIGHT: f32 = theme::TEXT_INPUT_CARET_HEIGHT;
 const TEXT_INPUT_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 const TEXT_INPUT_BLINK_PAUSE: Duration = Duration::from_millis(300);
+const PREVIEW_CANVAS_MIN_ZOOM: f64 = 0.25;
+const PREVIEW_CANVAS_MAX_ZOOM: f64 = 8.0;
+const PREVIEW_CANVAS_ZOOM_STEP: f64 = 1.18;
+const PREVIEW_CANVAS_MAX_PAN: f64 = 2.0;
+const PREVIEW_CANVAS_LERP_FACTOR: f64 = 0.2;
+const PREVIEW_CANVAS_SNAP_EPSILON: f64 = 0.01;
 
 pub struct FrameRoot {
     active_view: ActiveView,
@@ -273,6 +280,10 @@ impl Default for SubtitleUiState {
 }
 
 struct PreviewUiState {
+    canvas_file_id: Option<String>,
+    canvas: PreviewCanvasState,
+    canvas_pan_drag: Option<PreviewCanvasPanDragState>,
+    canvas_bounds: Option<Bounds<Pixels>>,
     crop_file_id: Option<String>,
     crop_mode: bool,
     draft_crop: Option<CropRect>,
@@ -284,6 +295,7 @@ struct PreviewUiState {
     pending_overlay_dimensions_key: Option<String>,
     overlay_image_dimensions: Option<PreviewOverlayImageDimensions>,
     overlay_opacity_slider_bounds: Option<Bounds<Pixels>>,
+    timeline_track_bounds: Option<Bounds<Pixels>>,
     playback_file_id: Option<String>,
     playback: PreviewPlaybackState,
     runtime_key: Option<PreviewRuntimeKey>,
@@ -298,6 +310,10 @@ struct PreviewUiState {
 impl Default for PreviewUiState {
     fn default() -> Self {
         Self {
+            canvas_file_id: None,
+            canvas: PreviewCanvasState::default(),
+            canvas_pan_drag: None,
+            canvas_bounds: None,
             crop_file_id: None,
             crop_mode: false,
             draft_crop: None,
@@ -309,6 +325,7 @@ impl Default for PreviewUiState {
             pending_overlay_dimensions_key: None,
             overlay_image_dimensions: None,
             overlay_opacity_slider_bounds: None,
+            timeline_track_bounds: None,
             playback_file_id: None,
             playback: PreviewPlaybackState::new(false),
             runtime_key: None,
@@ -320,6 +337,42 @@ impl Default for PreviewUiState {
             frame_tick_active: false,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PreviewCanvasState {
+    current_zoom: f64,
+    target_zoom: f64,
+    current_pan_x: f64,
+    current_pan_y: f64,
+    target_pan_x: f64,
+    target_pan_y: f64,
+}
+
+impl Default for PreviewCanvasState {
+    fn default() -> Self {
+        Self {
+            current_zoom: PREVIEW_CANVAS_MIN_ZOOM,
+            target_zoom: PREVIEW_CANVAS_MIN_ZOOM,
+            current_pan_x: 0.0,
+            current_pan_y: 0.0,
+            target_pan_x: 0.0,
+            target_pan_y: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PreviewCanvasPanDragState {
+    start_position: Point<Pixels>,
+    start_pan_x: f64,
+    start_pan_y: f64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::app) enum PreviewCanvasZoomDirection {
+    In,
+    Out,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -356,6 +409,7 @@ struct PreviewRuntimeKey {
     rotation_degrees: u16,
     flip_horizontal: bool,
     flip_vertical: bool,
+    crop: Option<EnginePreviewCrop>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

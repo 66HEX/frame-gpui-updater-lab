@@ -21,11 +21,33 @@ pub(in crate::app) struct PreviewShellState {
     pub(in crate::app) availability: PreviewControlAvailability,
     pub(in crate::app) playback: PreviewPlaybackState,
     pub(in crate::app) duration_seconds: f64,
+    pub(in crate::app) canvas: PreviewCanvasRenderState,
     pub(in crate::app) crop: PreviewCropRenderState,
     pub(in crate::app) overlay: PreviewOverlayRenderState,
     pub(in crate::app) media: Option<PreviewMediaRenderState>,
     pub(in crate::app) render_image: Option<Arc<RenderImage>>,
     pub(in crate::app) runtime_error: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::app) struct PreviewCanvasRenderState {
+    pub(in crate::app) zoom: f64,
+    pub(in crate::app) pan_x: f64,
+    pub(in crate::app) pan_y: f64,
+    pub(in crate::app) viewport_width: f64,
+    pub(in crate::app) viewport_height: f64,
+}
+
+impl Default for PreviewCanvasRenderState {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+            viewport_width: 0.0,
+            viewport_height: 0.0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70,6 +92,7 @@ pub(in crate::app) struct PreviewTimecodeInputFocuses<'a> {
 }
 
 pub(in crate::app) struct PreviewPanelProps<'a> {
+    pub(in crate::app) canvas: PreviewCanvasRenderState,
     pub(in crate::app) crop: PreviewCropRenderState,
     pub(in crate::app) overlay: PreviewOverlayRenderState,
     pub(in crate::app) timecode_focuses: PreviewTimecodeInputFocuses<'a>,
@@ -90,6 +113,7 @@ pub(in crate::app) fn preview_panel(
         settings,
         props.crop,
         props.overlay,
+        props.canvas,
         props.playback,
         props.render_image,
         props.runtime_error,
@@ -110,6 +134,7 @@ pub(in crate::app) fn preview_shell_state(
     settings: SettingsRenderState<'_>,
     crop: PreviewCropRenderState,
     overlay: PreviewOverlayRenderState,
+    canvas: PreviewCanvasRenderState,
     playback: PreviewPlaybackState,
     render_image: Option<Arc<RenderImage>>,
     runtime_error: Option<String>,
@@ -133,6 +158,7 @@ pub(in crate::app) fn preview_shell_state(
         availability,
         playback,
         duration_seconds,
+        canvas,
         crop,
         overlay,
         media,

@@ -47,6 +47,14 @@ impl PreviewTransform {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PreviewCrop {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreviewFrame {
     pub width: u32,
@@ -102,6 +110,7 @@ pub struct PreviewSessionConfig {
     pub max_height: u32,
     pub fps: u32,
     pub transform: PreviewTransform,
+    pub crop: Option<PreviewCrop>,
 }
 
 impl PreviewSessionConfig {
@@ -134,6 +143,10 @@ impl PreviewSessionConfig {
                 "preview rotation must be 0, 90, 180, or 270 degrees".to_string(),
             ));
         }
+        if let Some(crop) = self.crop {
+            validate_range("crop_width", crop.width, 1, MAX_PREVIEW_DIMENSION * 8)?;
+            validate_range("crop_height", crop.height, 1, MAX_PREVIEW_DIMENSION * 8)?;
+        }
 
         match (self.source_width, self.source_height) {
             (Some(width), Some(height)) => {
@@ -149,8 +162,33 @@ impl PreviewSessionConfig {
                     MIN_PREVIEW_DIMENSION,
                     MAX_PREVIEW_DIMENSION * 8,
                 )?;
+                if let Some(crop) = self.crop {
+                    let source = if self.transform.has_side_rotation() {
+                        PreviewDimensions {
+                            width: height,
+                            height: width,
+                        }
+                    } else {
+                        PreviewDimensions { width, height }
+                    };
+                    let crop_right = crop.x.checked_add(crop.width);
+                    let crop_bottom = crop.y.checked_add(crop.height);
+                    if crop_right.is_none_or(|right| right > source.width)
+                        || crop_bottom.is_none_or(|bottom| bottom > source.height)
+                    {
+                        return Err(PreviewEngineError::InvalidInput(
+                            "preview crop must fit inside transformed source dimensions"
+                                .to_string(),
+                        ));
+                    }
+                }
             }
-            (None, None) => {}
+            (None, None) if self.crop.is_none() => {}
+            (None, None) => {
+                return Err(PreviewEngineError::InvalidInput(
+                    "preview crop requires source_width and source_height".to_string(),
+                ));
+            }
             _ => {
                 return Err(PreviewEngineError::InvalidInput(
                     "source_width and source_height must be provided together".to_string(),
@@ -163,6 +201,10 @@ impl PreviewSessionConfig {
 
     #[must_use]
     pub fn target_dimensions(&self) -> PreviewDimensions {
+        if let Some(crop) = self.crop {
+            return fit_dimensions(crop.width, crop.height, self.max_width, self.max_height);
+        }
+
         match self.transformed_source_dimensions() {
             Some(dimensions) => fit_dimensions(
                 dimensions.width,

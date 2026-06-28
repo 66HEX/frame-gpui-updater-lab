@@ -1,4 +1,77 @@
 use super::*;
+use crate::app::preview_actions::preview_canvas_layout_metrics;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct PreviewCanvasPanDrag;
+
+struct PreviewCanvasBoundsProbe {
+    owner: Entity<FrameRoot>,
+}
+
+impl IntoElement for PreviewCanvasBoundsProbe {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for PreviewCanvasBoundsProbe {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let style = Style {
+            position: Position::Absolute,
+            size: size(relative(1.0).into(), relative(1.0).into()),
+            flex_grow: 1.0,
+            flex_shrink: 1.0,
+            ..Style::default()
+        };
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        self.owner.update(cx, |root, _cx| {
+            root.set_preview_canvas_bounds(bounds);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+}
 
 pub(in crate::app) fn normalized_point_from_bounds(
     position: gpui::Point<Pixels>,
@@ -48,7 +121,7 @@ pub(in crate::app) fn preview_viewport(
     if preview_visual_controls_visible(state) {
         viewport = viewport
             .child(preview_toolbar(state, cx))
-            .child(preview_zoom_toolbar(state));
+            .child(preview_zoom_toolbar(state, cx));
     }
 
     viewport
@@ -57,15 +130,42 @@ pub(in crate::app) fn preview_viewport(
 pub(in crate::app) fn preview_viewport_content(
     state: &PreviewShellState,
     cx: &mut Context<FrameRoot>,
-) -> gpui::Div {
+) -> gpui::AnyElement {
     if let (Some(render_image), Some(media)) = (&state.render_image, state.media) {
-        return div()
+        let content = div()
+            .id("preview-canvas-pan-layer")
             .absolute()
             .inset_0()
+            .overflow_hidden()
             .flex()
             .items_center()
-            .justify_center()
-            .child(preview_media_stage(state, render_image.clone(), media, cx));
+            .justify_center();
+        let content = if preview_canvas_pan_enabled(state) {
+            content
+                .cursor_grab()
+                .on_drag(PreviewCanvasPanDrag, |_drag, _position, _window, cx| {
+                    cx.new(|_| PreviewTimelineDragPreview)
+                })
+        } else {
+            content
+        };
+
+        return content
+            .on_drag_move(cx.listener(
+                |root, event: &DragMoveEvent<PreviewCanvasPanDrag>, _window, cx| {
+                    if root.apply_preview_canvas_pan_drag(event.event.position, event.bounds, cx) {
+                        cx.notify();
+                    }
+                },
+            ))
+            .capture_any_mouse_up(cx.listener(|root, _event: &MouseUpEvent, _window, cx| {
+                if root.end_preview_canvas_pan_drag() {
+                    cx.notify();
+                }
+            }))
+            .child(PreviewCanvasBoundsProbe { owner: cx.entity() })
+            .child(preview_media_stage(state, render_image.clone(), media, cx))
+            .into_any_element();
     }
 
     let content = div()
@@ -80,10 +180,12 @@ pub(in crate::app) fn preview_viewport_content(
         .text_color(color(theme::FRAME_GRAY_600));
 
     let Some(file_name) = state.selected_file_name.as_deref() else {
-        return content.child("Drop files or use Add Source");
+        return content
+            .child("Drop files or use Add Source")
+            .into_any_element();
     };
 
-    match state.metadata_status {
+    let content = match state.metadata_status {
         PreviewMetadataStatus::Idle | PreviewMetadataStatus::Loading => {
             content.child("Analyzing source...")
         }
@@ -113,11 +215,12 @@ pub(in crate::app) fn preview_viewport_content(
                             .truncate()
                             .text_color(color(theme::FRAME_GRAY_600))
                             .child(message.to_string()),
-                    );
+                    )
+                    .into_any_element();
             }
 
             if state.availability.media_kind == PreviewMediaKind::Unknown {
-                return content.child("Preview unavailable");
+                return content.child("Preview unavailable").into_any_element();
             }
 
             content
@@ -132,7 +235,9 @@ pub(in crate::app) fn preview_viewport_content(
                 )
                 .child(preview_media_kind_label(state.availability.media_kind))
         }
-    }
+    };
+
+    content.into_any_element()
 }
 
 pub(in crate::app) fn preview_media_stage(
@@ -141,14 +246,9 @@ pub(in crate::app) fn preview_media_stage(
     media: PreviewMediaRenderState,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
+    let canvas = state.canvas;
     let mut stage = div()
         .id("preview-media-stage")
-        .relative()
-        .h_full()
-        .max_w(relative(1.0))
-        .max_h(relative(1.0))
-        .aspect_ratio(media.aspect_ratio())
-        .overflow_hidden()
         .on_drag_move(cx.listener(
             |root, event: &DragMoveEvent<PreviewCropDrag>, _window, cx| {
                 let drag = *event.drag(cx);
@@ -175,7 +275,31 @@ pub(in crate::app) fn preview_media_stage(
                 cx.notify();
             }
         }))
-        .child(img(render_image).size_full().object_fit(ObjectFit::Fill));
+        .child(preview_media_image(render_image));
+
+    if let Some(metrics) = preview_canvas_layout_metrics(
+        canvas.viewport_width,
+        canvas.viewport_height,
+        f64::from(media.width),
+        f64::from(media.height),
+        canvas.zoom,
+        canvas.pan_x,
+        canvas.pan_y,
+    ) {
+        stage = stage
+            .absolute()
+            .left(px(metrics.left as f32))
+            .top(px(metrics.top as f32))
+            .w(px(metrics.width as f32))
+            .h(px(metrics.height as f32));
+    } else {
+        stage = stage
+            .relative()
+            .h_full()
+            .max_w(relative(1.0))
+            .max_h(relative(1.0))
+            .aspect_ratio(media.aspect_ratio());
+    }
 
     if let Some(overlay) = preview_overlay_layer(state) {
         stage = stage.child(overlay);
@@ -186,6 +310,15 @@ pub(in crate::app) fn preview_media_stage(
     }
 
     stage
+}
+
+pub(in crate::app) fn preview_canvas_pan_enabled(state: &PreviewShellState) -> bool {
+    preview_visual_controls_enabled(state) && !state.crop.crop_mode && !state.overlay.overlay_mode
+}
+
+fn preview_media_image(render_image: Arc<RenderImage>) -> gpui::Div {
+    let image = img(render_image).size_full().object_fit(ObjectFit::Fill);
+    div().absolute().inset_0().overflow_hidden().child(image)
 }
 
 pub(in crate::app) fn preview_media_placeholder(media_kind: PreviewMediaKind) -> gpui::Div {
