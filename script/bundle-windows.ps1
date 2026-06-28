@@ -116,7 +116,8 @@ Invoke-Checked rustup target add $Target
 Push-Location $RepoRoot
 try {
     Invoke-Checked cargo xtask setup-ffmpeg --platform win32 --arch $Architecture
-    $gstreamerEnv = & cargo xtask setup-gstreamer --platform win32 --arch $Architecture --mode bundle --install --print-env
+    Invoke-Checked cargo xtask setup-gstreamer --platform win32 --arch $Architecture --mode bundle --install
+    $gstreamerEnv = & cargo xtask setup-gstreamer --platform win32 --arch $Architecture --mode bundle --print-env
     if ($LASTEXITCODE -ne 0) {
         throw "cargo xtask setup-gstreamer exited with status $LASTEXITCODE"
     }
