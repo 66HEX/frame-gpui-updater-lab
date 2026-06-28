@@ -1952,7 +1952,7 @@ dependencies = [
 
 [[package]]
 name = "frame-app"
-version = "0.1.1-lab.3"
+version = "0.1.1-lab.4"
 dependencies = [
  "directories",
  "embed-resource",
@@ -1981,7 +1981,7 @@ dependencies = [
 
 [[package]]
 name = "frame-core"
-version = "0.1.1-lab.3"
+version = "0.1.1-lab.4"
 dependencies = [
  "font-kit",
  "regex",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "frame-updater"
-version = "0.1.1-lab.3"
+version = "0.1.1-lab.4"
 dependencies = [
  "base64",
  "directories",
@@ -7951,7 +7951,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.1-lab.3"
+version = "0.1.1-lab.4"
 dependencies = [
  "frame-updater",
  "semver",

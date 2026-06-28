@@ -1,4 +1,4 @@
-#define AppId "{CCFCC551-7612-4D99-8F81-8F02DF450FDA}"
+#define AppId "{{CCFCC551-7612-4D99-8F81-8F02DF450FDA}"
 #ifndef AppName
 #define AppName "Frame GPUI Lab"
 #endif
