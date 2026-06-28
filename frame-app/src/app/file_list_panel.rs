@@ -1,7 +1,11 @@
 use super::*;
 use super::{components::*, primitives::*};
 
-pub(super) fn file_list_panel(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn file_list_panel(
+    queue: &FileQueue,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     div()
         .flex()
         .flex_col()
@@ -15,7 +19,7 @@ pub(super) fn file_list_panel(queue: &FileQueue, cx: &mut Context<FrameRoot>) ->
                 .shadow(drop_target_shadows())
         })
         .child(file_list_header(queue.batch_selection_state(), cx))
-        .child(file_list_body(queue, cx))
+        .child(file_list_body(queue, window, cx))
 }
 
 pub(super) fn file_list_header(
@@ -78,7 +82,11 @@ pub(super) fn file_list_header(
         .child(panel_bottom_separator())
 }
 
-pub(super) fn file_list_body(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> impl IntoElement {
+pub(super) fn file_list_body(
+    queue: &FileQueue,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
     let body = div()
         .id("file-list-body")
         .flex_1()
@@ -103,6 +111,7 @@ pub(super) fn file_list_body(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> 
         body = body.child(file_list_row(
             file,
             queue.selected_file_id() == Some(file.id.as_str()),
+            window,
             cx,
         ));
     }
@@ -112,6 +121,7 @@ pub(super) fn file_list_body(queue: &FileQueue, cx: &mut Context<FrameRoot>) -> 
 pub(super) fn file_list_row(
     file: &FileItem,
     is_selected: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let group_name = format!("file-list-row-{}", file.id);
@@ -185,6 +195,7 @@ pub(super) fn file_list_row(
             file.id.clone(),
             file.row_actions(),
             group_name,
+            window,
             cx,
         ))
         .child(panel_bottom_separator())
@@ -215,6 +226,7 @@ pub(super) fn row_actions_cell(
     file_id: String,
     actions: RowActionAvailability,
     group_name: String,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let mut cell = div()
@@ -240,6 +252,8 @@ pub(super) fn row_actions_cell(
                 assets::ICON_PAUSE,
                 true,
                 RowActionTone::Normal,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -257,6 +271,8 @@ pub(super) fn row_actions_cell(
                 assets::ICON_PLAY,
                 true,
                 RowActionTone::Normal,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -275,6 +291,8 @@ pub(super) fn row_actions_cell(
                 assets::ICON_TRASH,
                 true,
                 RowActionTone::Destructive,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -289,6 +307,8 @@ pub(super) fn row_actions_cell(
             assets::ICON_TRASH,
             false,
             RowActionTone::Destructive,
+            window,
+            cx,
         ))
     }
 }
@@ -304,6 +324,8 @@ pub(super) fn row_action_button(
     icon: &'static str,
     enabled: bool,
     tone: RowActionTone,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let variant = match tone {
         RowActionTone::Normal => FrameIconButtonVariant::Ghost,
@@ -317,6 +339,8 @@ pub(super) fn row_action_button(
         enabled,
         FILE_LIST_ACTION_BUTTON_SIZE,
         FILE_LIST_ACTION_ICON_SIZE,
+        window,
+        cx,
     )
 }
 pub(super) fn row_checkbox_control(

@@ -95,6 +95,7 @@ pub(in crate::app) fn normalized_point_from_bounds(
 
 pub(in crate::app) fn preview_viewport(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let mut viewport = div()
@@ -113,17 +114,17 @@ pub(in crate::app) fn preview_viewport(
         .child(preview_viewport_content(state, cx));
 
     if state.crop.crop_mode && state.crop.draft_crop.is_some() {
-        viewport = viewport.child(preview_crop_aspect_bar(state, cx));
+        viewport = viewport.child(preview_crop_aspect_bar(state, window, cx));
     }
 
-    if let Some(overlay_controls) = preview_overlay_controls(state, cx) {
+    if let Some(overlay_controls) = preview_overlay_controls(state, window, cx) {
         viewport = viewport.child(overlay_controls);
     }
 
     if preview_visual_controls_visible(state) {
         viewport = viewport
-            .child(preview_toolbar(state, cx))
-            .child(preview_zoom_toolbar(state, cx));
+            .child(preview_toolbar(state, window, cx))
+            .child(preview_zoom_toolbar(state, window, cx));
     }
 
     viewport

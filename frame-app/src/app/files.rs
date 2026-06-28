@@ -1,6 +1,104 @@
 use super::*;
 
+pub(super) struct FileDropLifecycleProbe {
+    pub(super) owner: Entity<FrameRoot>,
+}
+
+impl IntoElement for FileDropLifecycleProbe {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for FileDropLifecycleProbe {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let style = Style {
+            position: Position::Absolute,
+            size: size(px(0.0).into(), px(0.0).into()),
+            ..Style::default()
+        };
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Self::PrepaintState {
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        _cx: &mut App,
+    ) {
+        let owner = self.owner.clone();
+        window.on_mouse_event(move |event: &FileDropEvent, phase, _window, cx| {
+            if phase != DispatchPhase::Capture || !matches!(event, FileDropEvent::Exited) {
+                return;
+            }
+
+            owner.update(cx, |root, cx| {
+                if root.close_drag_drop_overlay() {
+                    cx.notify();
+                }
+            });
+        });
+    }
+}
+
 impl FrameRoot {
+    pub(super) fn open_drag_drop_overlay(&mut self) -> bool {
+        let changed = !self.drag_drop_ui.is_open || !self.drag_drop_ui.is_present;
+        self.drag_drop_ui.is_open = true;
+        self.drag_drop_ui.is_present = true;
+        changed
+    }
+
+    pub(super) fn close_drag_drop_overlay(&mut self) -> bool {
+        let changed = self.drag_drop_ui.is_open;
+        self.drag_drop_ui.is_open = false;
+        changed
+    }
+
+    pub(super) fn finish_drag_drop_overlay_close(&mut self) -> bool {
+        if self.drag_drop_ui.is_open || !self.drag_drop_ui.is_present {
+            return false;
+        }
+
+        self.drag_drop_ui.is_present = false;
+        true
+    }
+
     pub(super) fn prompt_add_source(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let paths = cx.background_spawn(async { pick_source_files() }).await;

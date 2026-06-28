@@ -41,6 +41,31 @@ mod frame_root_imports {
     }
 
     #[test]
+    fn drag_drop_overlay_stays_present_until_close_motion_finishes() {
+        let mut root = FrameRoot::new();
+        root.drag_drop_ui.is_open = true;
+        root.drag_drop_ui.is_present = true;
+
+        assert!(root.close_drag_drop_overlay());
+
+        assert!(!root.drag_drop_ui.is_open);
+        assert!(root.drag_drop_ui.is_present);
+        assert!(root.finish_drag_drop_overlay_close());
+        assert!(!root.drag_drop_ui.is_present);
+        assert!(!root.finish_drag_drop_overlay_close());
+    }
+
+    #[test]
+    fn drag_drop_overlay_open_is_stable_without_pointer_motion() {
+        let mut root = FrameRoot::new();
+
+        assert!(root.open_drag_drop_overlay());
+        assert!(!root.open_drag_drop_overlay());
+        assert!(root.drag_drop_ui.is_open);
+        assert!(root.drag_drop_ui.is_present);
+    }
+
+    #[test]
     fn allocate_file_imports_continues_after_previous_batch() {
         let mut root = FrameRoot::new();
         root.allocate_file_imports(vec![PathBuf::from("/tmp/one.mp4")]);

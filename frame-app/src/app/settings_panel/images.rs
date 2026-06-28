@@ -5,7 +5,7 @@ pub(in crate::app) fn settings_images_tab(
     settings_disabled: bool,
     video_width_focus: Option<&FocusHandle>,
     video_height_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -23,11 +23,13 @@ pub(in crate::app) fn settings_images_tab(
         .child(settings_video_scaling_section(
             config,
             settings_disabled,
+            window,
             cx,
         ))
         .child(settings_images_pixel_format_section(
             config,
             settings_disabled,
+            window,
             cx,
         ))
 }
@@ -35,6 +37,7 @@ pub(in crate::app) fn settings_images_tab(
 fn settings_images_pixel_format_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -48,6 +51,8 @@ fn settings_images_pixel_format_section(
                 option.caption,
                 option.is_selected,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();

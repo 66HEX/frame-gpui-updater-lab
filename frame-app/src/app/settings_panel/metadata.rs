@@ -5,12 +5,17 @@ pub(in crate::app) fn settings_metadata_tab(
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
     focuses: SettingsMetadataInputFocuses<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut content = div().flex().flex_col().gap_4().child(
         settings_section("METADATA MODE")
-            .child(settings_metadata_mode_grid(config, settings_disabled, cx))
+            .child(settings_metadata_mode_grid(
+                config,
+                settings_disabled,
+                window,
+                cx,
+            ))
             .child(settings_hint_text(config.metadata.mode.description())),
     );
 
@@ -26,6 +31,7 @@ pub(in crate::app) fn settings_metadata_tab(
 fn settings_metadata_mode_grid(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(3).gap_2();
@@ -38,6 +44,8 @@ fn settings_metadata_mode_grid(
                 option.label,
                 option.is_selected,
                 is_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -59,7 +67,7 @@ fn settings_metadata_fields(
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
     focuses: SettingsMetadataInputFocuses<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut fields = div().flex().flex_col().gap_3();

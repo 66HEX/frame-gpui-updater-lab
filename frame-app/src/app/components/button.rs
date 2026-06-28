@@ -15,8 +15,19 @@ pub(in crate::app) fn frame_choice_button(
     label: impl Into<String>,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
-    frame_text_button(id, label, ButtonVariant::Secondary, selected, enabled).w_full()
+    frame_text_button(
+        id,
+        label,
+        ButtonVariant::Secondary,
+        selected,
+        enabled,
+        window,
+        cx,
+    )
+    .w_full()
 }
 
 pub(in crate::app) fn frame_text_button(
@@ -25,31 +36,36 @@ pub(in crate::app) fn frame_text_button(
     variant: ButtonVariant,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
     let colors = button_colors(variant, selected, enabled);
+    let animated = animated_button_colors(id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
     div()
-        .id(id.into())
+        .id(id)
         .h(px(SETTINGS_CONTROL_HEIGHT))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
         .px(px(10.0))
-        .bg(color(colors.background))
+        .bg(background)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
         .shadow(button_highlight_shadows())
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })
@@ -63,6 +79,8 @@ pub(in crate::app) fn frame_icon_button(
     enabled: bool,
     size: f32,
     icon_size: f32,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let id = id.into();
     let (background, hover_background, active_background, foreground, hover_foreground, opacity) =
@@ -116,6 +134,22 @@ pub(in crate::app) fn frame_icon_button(
                 1.0,
             ),
         };
+    let animated = animated_button_colors(
+        id.clone(),
+        ButtonColors {
+            background,
+            hover_background,
+            active_background,
+            foreground,
+            hover_foreground,
+            opacity,
+        },
+        window,
+        cx,
+    );
+    let animated_background = animated.background;
+    let animated_foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(id.clone())
@@ -126,27 +160,19 @@ pub(in crate::app) fn frame_icon_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(background))
-        .text_color(color(foreground))
+        .bg(animated_background)
+        .text_color(animated_foreground)
         .opacity(opacity)
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(hover_background))
-                    .text_color(color(hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(active_background)))
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| style.bg(color(active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })
-        .child(icon_svg_with_hover(
-            icon,
-            icon_size,
-            color(foreground),
-            id,
-            color(hover_foreground),
-        ))
+        .child(icon_svg(icon, icon_size, animated_foreground))
 }

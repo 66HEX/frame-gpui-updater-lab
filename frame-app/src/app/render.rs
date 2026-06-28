@@ -1,3 +1,4 @@
+use super::files::FileDropLifecycleProbe;
 use super::*;
 
 impl Render for FrameRoot {
@@ -152,6 +153,7 @@ impl Render for FrameRoot {
                 &self.conversion_events,
                 &self.logs_scroll_handle,
                 self.logs_follow_tail,
+                window,
                 cx,
             )),
         };
@@ -180,10 +182,20 @@ impl Render for FrameRoot {
             )
             .on_drop(cx.listener(|root, paths: &ExternalPaths, _window, cx| {
                 cx.stop_propagation();
+                root.close_drag_drop_overlay();
                 root.import_source_paths(paths.paths().to_vec(), cx);
+                cx.notify();
             }))
-            .child(titlebar(state, cx))
-            .child(content);
+            .on_drag_move(cx.listener(
+                |root, _event: &DragMoveEvent<ExternalPaths>, _window, cx| {
+                    if root.open_drag_drop_overlay() {
+                        cx.notify();
+                    }
+                },
+            ))
+            .child(titlebar(state, window, cx))
+            .child(content)
+            .child(FileDropLifecycleProbe { owner: cx.entity() });
 
         if self.settings_ui.is_present {
             let value_focus = self.ensure_text_input_focus(FrameTextInputKind::MaxConcurrency, cx);
@@ -198,7 +210,9 @@ impl Render for FrameRoot {
             ));
         }
 
-        root = root.child(drag_drop_overlay(cx));
+        if self.drag_drop_ui.is_present {
+            root = root.child(drag_drop_overlay(self.drag_drop_ui.is_open, window, cx));
+        }
 
         root
     }

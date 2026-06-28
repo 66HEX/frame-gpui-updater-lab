@@ -17,6 +17,12 @@ pub(super) struct ButtonColors {
     pub(super) opacity: f32,
 }
 
+pub(super) struct AnimatedButtonColors {
+    pub(super) background: Rgba,
+    pub(super) foreground: Rgba,
+    pub(super) hover_transition: gpui::Transition<f32>,
+}
+
 pub(super) fn button_colors(variant: ButtonVariant, selected: bool, enabled: bool) -> ButtonColors {
     let active_variant = matches!(variant, ButtonVariant::Default) || selected;
     if !enabled {
@@ -75,6 +81,21 @@ pub(super) fn button_colors(variant: ButtonVariant, selected: bool, enabled: boo
     }
 }
 
+pub(super) fn animated_button_colors(
+    id: impl Into<ElementId>,
+    colors: ButtonColors,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnimatedButtonColors {
+    let hover_transition = hover_motion(id, window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    AnimatedButtonColors {
+        background: mix_color(colors.background, colors.hover_background, hover_progress),
+        foreground: mix_color(colors.foreground, colors.hover_foreground, hover_progress),
+        hover_transition,
+    }
+}
+
 pub(super) fn button_mouse_down(enabled: bool, window: &mut Window, cx: &mut App) {
     if enabled {
         window.prevent_default();
@@ -84,34 +105,40 @@ pub(super) fn button_mouse_down(enabled: bool, window: &mut Window, cx: &mut App
 }
 
 pub(super) fn action_button(
+    id: impl Into<String>,
     icon: &'static str,
     label: Option<&'static str>,
     variant: ButtonVariant,
     enabled: bool,
-) -> gpui::Div {
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
     let is_icon_only = label.is_none();
     let colors = button_colors(variant, false, enabled);
+    let animated = animated_button_colors(id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     let button = div()
+        .id(id.clone())
+        .group(id.clone())
         .h(px(TITLEBAR_BUTTON_HEIGHT))
         .flex()
         .items_center()
         .justify_center()
         .gap_2()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(colors.background))
+        .bg(background)
         .shadow(button_highlight_shadows())
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
-        .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-        })
+        .when(enabled, |this| this.hover(|style| style.cursor_pointer()))
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         });
@@ -120,12 +147,12 @@ pub(super) fn action_button(
         button.w(px(TITLEBAR_ICON_BUTTON_SIZE)).child(icon_svg(
             icon,
             TITLEBAR_ACTION_ICON_SIZE,
-            color(colors.foreground),
+            foreground,
         ))
     } else {
         button
             .px(px(10.0))
-            .child(icon_svg(icon, TITLEBAR_ICON_SIZE, color(colors.foreground)))
+            .child(icon_svg(icon, TITLEBAR_ICON_SIZE, foreground))
             .child(label.unwrap_or_default())
     }
 }
@@ -136,21 +163,6 @@ pub(super) fn icon_svg(path: &'static str, size: f32, icon_color: Rgba) -> impl 
         .w(px(size))
         .h(px(size))
         .text_color(icon_color)
-}
-
-pub(super) fn icon_svg_with_hover(
-    path: &'static str,
-    size: f32,
-    icon_color: Rgba,
-    hover_group: impl Into<SharedString>,
-    hover_color: Rgba,
-) -> impl IntoElement {
-    svg()
-        .path(path)
-        .w(px(size))
-        .h(px(size))
-        .text_color(icon_color)
-        .group_hover(hover_group, move |style| style.text_color(hover_color))
 }
 
 pub(super) fn parse_hex(hex: &str) -> Rgba {

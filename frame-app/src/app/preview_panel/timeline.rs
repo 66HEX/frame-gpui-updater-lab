@@ -85,7 +85,7 @@ impl Element for PreviewTimelineTrackBoundsProbe {
 pub(in crate::app) fn preview_timeline(
     state: &PreviewShellState,
     focuses: PreviewTimecodeInputFocuses<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let labels = preview_timeline_labels(state);
@@ -154,7 +154,7 @@ pub(in crate::app) fn preview_timeline(
                 .flex_col()
                 .gap(px(6.0))
                 .child(preview_timeline_label(" "))
-                .child(preview_play_button(state, cx)),
+                .child(preview_play_button(state, window, cx)),
         )
 }
 
@@ -199,7 +199,7 @@ pub(in crate::app) struct PreviewTimecodeFieldSpec<'a> {
 
 pub(in crate::app) fn preview_timecode_field(
     spec: PreviewTimecodeFieldSpec<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let PreviewTimecodeFieldSpec {
@@ -403,6 +403,7 @@ pub(in crate::app) fn preview_timeline_handle(
 
 pub(in crate::app) fn preview_play_button(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let enabled = preview_trim_enabled(state);
@@ -412,7 +413,7 @@ pub(in crate::app) fn preview_play_button(
         assets::ICON_PLAY
     };
 
-    preview_tool_button(icon, false, enabled).on_click(cx.listener(
+    preview_tool_button(icon, false, enabled, window, cx).on_click(cx.listener(
         |root, _: &ClickEvent, _window, cx| {
             if root.toggle_preview_playback() {
                 cx.notify();

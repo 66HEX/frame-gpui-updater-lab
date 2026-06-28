@@ -146,7 +146,12 @@ pub(in crate::app) fn settings_subtitles_tab(
     let burn_in_disabled = state.settings_disabled || copy_mode;
     let content = div().flex().flex_col().gap_4().child(
         settings_section("BURN-IN SUBTITLES")
-            .child(settings_subtitle_burn_button(config, burn_in_disabled, cx))
+            .child(settings_subtitle_burn_button(
+                config,
+                burn_in_disabled,
+                window,
+                cx,
+            ))
             .child(settings_hint_text(if copy_mode {
                 "Burn-in subtitles are disabled in stream copy mode."
             } else {
@@ -187,7 +192,7 @@ pub(in crate::app) fn settings_subtitles_tab(
 
     let mut list = div().grid().grid_cols(1).gap_2();
     for option in track_options {
-        list = list.child(settings_subtitle_track_button(option, cx));
+        list = list.child(settings_subtitle_track_button(option, window, cx));
     }
 
     content.child(settings_section("SOURCE TRACKS").child(list))
@@ -196,9 +201,14 @@ pub(in crate::app) fn settings_subtitles_tab(
 fn settings_subtitle_burn_button(
     config: &ConversionConfig,
     disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(ButtonVariant::Secondary, false, !disabled);
+    let animated = animated_button_colors("settings-subtitle-burn-file", colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
     let label = subtitle_burn_file_label(config);
     let has_path = config.subtitle_burn_path.is_some();
 
@@ -213,21 +223,19 @@ fn settings_subtitle_burn_button(
         .rounded(px(theme::RADIUS_SM))
         .px(px(10.0))
         .when(has_path, |this| this.pr(px(32.0)))
-        .bg(color(colors.background))
+        .bg(background)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
         .shadow(button_highlight_shadows())
         .when(!disabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(disabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && !disabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(!disabled, window, cx);
         })
@@ -241,7 +249,7 @@ fn settings_subtitle_burn_button(
         .child(div().truncate().child(label));
 
     if has_path {
-        button.child(settings_subtitle_clear_button(disabled, cx))
+        button.child(settings_subtitle_clear_button(disabled, window, cx))
     } else {
         button
     }
@@ -249,8 +257,13 @@ fn settings_subtitle_burn_button(
 
 fn settings_subtitle_clear_button(
     disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
+    let hover_transition = hover_motion("settings-subtitle-clear-file-hover", window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    let background = mix_color(theme::FRAME_GRAY_100, theme::FRAME_GRAY_200, hover_progress);
+
     div()
         .id("settings-subtitle-clear-file")
         .absolute()
@@ -261,20 +274,18 @@ fn settings_subtitle_clear_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(theme::FRAME_GRAY_100))
+        .bg(background)
         .text_color(color(theme::FRAME_RED))
         .opacity(if disabled { 0.5 } else { 1.0 })
         .shadow(button_highlight_shadows())
         .when(!disabled, |this| {
-            this.hover(|style| {
-                style
-                    .bg(color(theme::FRAME_GRAY_200))
-                    .text_color(color(theme::FRAME_RED))
-                    .cursor_pointer()
-            })
-            .active(|style| style.bg(color(theme::FRAME_GRAY_200)))
+            this.hover(|style| style.cursor_pointer())
+                .active(|style| style.bg(color(theme::FRAME_GRAY_200)))
         })
         .when(disabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && !disabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(!disabled, window, cx);
         })
@@ -379,6 +390,7 @@ fn settings_subtitle_style_controls(
                 .child(settings_subtitle_position_grid(
                     state.config,
                     state.disabled,
+                    window,
                     cx,
                 )),
         )
@@ -418,6 +430,7 @@ fn settings_subtitle_font_select(
             display,
             enabled,
             popover,
+            window,
             cx,
         ));
 
@@ -502,6 +515,7 @@ fn settings_subtitle_font_size_select(
             display,
             enabled,
             popover,
+            window,
             cx,
         ));
 
@@ -562,9 +576,14 @@ fn settings_subtitle_select_trigger(
     display: &str,
     enabled: bool,
     popover: SettingsSubtitlePopover,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(ButtonVariant::Secondary, false, enabled);
+    let animated = animated_button_colors(id, colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(id)
@@ -577,21 +596,19 @@ fn settings_subtitle_select_trigger(
         .min_w_0()
         .rounded(px(theme::RADIUS_SM))
         .px(px(10.0))
-        .bg(color(colors.background))
+        .bg(background)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
         .shadow(button_highlight_shadows())
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             cx.stop_propagation();
             button_mouse_down(enabled, window, cx);
@@ -609,13 +626,7 @@ fn settings_subtitle_select_trigger(
                 .text_color(color(theme::FOREGROUND))
                 .child(display.to_string()),
         )
-        .child(icon_svg_with_hover(
-            assets::ICON_CHEVRONS_UP_DOWN,
-            12.0,
-            color(colors.foreground),
-            id,
-            color(colors.hover_foreground),
-        ))
+        .child(icon_svg(assets::ICON_CHEVRONS_UP_DOWN, 12.0, foreground))
 }
 
 fn refresh_subtitle_select_hover_after_scroll(
@@ -801,6 +812,10 @@ fn settings_subtitle_color_field(
     };
     let enabled = !disabled;
     let colors = button_colors(ButtonVariant::Secondary, false, enabled);
+    let animated = animated_button_colors(id, colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
     let click_value = value.clone();
 
     let mut field = div()
@@ -821,21 +836,19 @@ fn settings_subtitle_color_field(
                 .gap_2()
                 .rounded(px(theme::RADIUS_SM))
                 .px(px(10.0))
-                .bg(color(colors.background))
+                .bg(background)
                 .text_size(px(theme::TEXT_LABEL_SIZE))
-                .text_color(color(colors.foreground))
+                .text_color(foreground)
                 .opacity(colors.opacity)
                 .shadow(button_highlight_shadows())
                 .when(enabled, |this| {
-                    this.hover(move |style| {
-                        style
-                            .bg(color(colors.hover_background))
-                            .text_color(color(colors.hover_foreground))
-                            .cursor_pointer()
-                    })
-                    .active(move |style| style.bg(color(colors.active_background)))
+                    this.hover(|style| style.cursor_pointer())
+                        .active(move |style| style.bg(color(colors.active_background)))
                 })
                 .when(!enabled, |this| this.cursor_not_allowed())
+                .on_hover(move |hover, _window, cx| {
+                    retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+                })
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
                     button_mouse_down(enabled, window, cx);
@@ -874,12 +887,10 @@ fn settings_subtitle_color_field(
                                 .child(value.to_uppercase()),
                         ),
                 )
-                .child(div().flex_shrink_0().child(icon_svg_with_hover(
+                .child(div().flex_shrink_0().child(icon_svg(
                     assets::ICON_CHEVRONS_UP_DOWN,
                     12.0,
-                    color(colors.foreground),
-                    id,
-                    color(colors.hover_foreground),
+                    foreground,
                 ))),
         );
 
@@ -903,7 +914,7 @@ fn settings_subtitle_color_picker(
     draft: &str,
     focus: Option<&FocusHandle>,
     progress: f32,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let align_right = target == SettingsSubtitleColorTarget::Outline;
@@ -1494,6 +1505,7 @@ fn subtitle_rgb_to_hex(r: f64, g: f64, b: f64) -> String {
 fn settings_subtitle_position_grid(
     config: &ConversionConfig,
     disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(3).gap_2();
@@ -1506,6 +1518,8 @@ fn settings_subtitle_position_grid(
                 option.label,
                 option.is_selected,
                 is_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -1524,6 +1538,7 @@ fn settings_subtitle_position_grid(
 
 pub(in crate::app) fn settings_subtitle_track_button(
     option: crate::settings::SubtitleTrackOption,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let index = option.index;
@@ -1543,6 +1558,8 @@ pub(in crate::app) fn settings_subtitle_track_button(
         option.is_selected,
         is_enabled,
         FrameTrackListItemLayout::Inline,
+        window,
+        cx,
     )
     .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
         cx.stop_propagation();

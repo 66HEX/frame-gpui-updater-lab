@@ -105,7 +105,7 @@ pub(in crate::app) fn preview_panel(
     file_queue: &FileQueue,
     settings: SettingsRenderState<'_>,
     props: PreviewPanelProps<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let state = preview_shell_state(
@@ -125,7 +125,7 @@ pub(in crate::app) fn preview_panel(
         .overflow_hidden()
         .card_surface()
         .p(px(PREVIEW_PANEL_PADDING))
-        .child(preview_viewport(&state, cx))
+        .child(preview_viewport(&state, window, cx))
         .child(preview_timeline(&state, props.timecode_focuses, window, cx))
 }
 

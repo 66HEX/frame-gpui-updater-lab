@@ -19,6 +19,7 @@ pub(in crate::app) const fn preview_toolbar_center_margin() -> f32 {
 
 pub(in crate::app) fn preview_toolbar(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let transform_enabled = preview_visual_controls_enabled(state);
@@ -38,19 +39,20 @@ pub(in crate::app) fn preview_toolbar(
         .p(px(PREVIEW_TOOLBAR_PADDING))
         .shadow(card_surface_shadows())
         .child(
-            preview_tool_button(assets::ICON_ROTATE_CW, false, transform_enabled).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
+            preview_tool_button(assets::ICON_ROTATE_CW, false, transform_enabled, window, cx)
+                .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                     if root.rotate_selected_preview() {
                         cx.notify();
                     }
-                }),
-            ),
+                })),
         )
         .child(
             preview_tool_button(
                 assets::ICON_FLIP_HORIZONTAL,
                 state.crop.flip_horizontal,
                 transform_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.toggle_selected_flip(FlipAxis::Horizontal) {
@@ -63,6 +65,8 @@ pub(in crate::app) fn preview_toolbar(
                 assets::ICON_FLIP_VERTICAL,
                 state.crop.flip_vertical,
                 transform_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.toggle_selected_flip(FlipAxis::Vertical) {
@@ -75,6 +79,8 @@ pub(in crate::app) fn preview_toolbar(
                 assets::ICON_CROP,
                 state.crop.crop_mode || state.crop.applied_crop.is_some(),
                 crop_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.toggle_selected_crop_mode() {
@@ -87,6 +93,8 @@ pub(in crate::app) fn preview_toolbar(
                 assets::ICON_FILE_IMAGE,
                 state.overlay.overlay_mode || state.overlay.overlay.is_some(),
                 overlay_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.trigger_selected_overlay(cx) {
@@ -98,6 +106,7 @@ pub(in crate::app) fn preview_toolbar(
 
 pub(in crate::app) fn preview_zoom_toolbar(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let enabled = preview_visual_controls_enabled(state);
@@ -113,22 +122,22 @@ pub(in crate::app) fn preview_zoom_toolbar(
         .p(px(4.0))
         .shadow(card_surface_shadows())
         .child(
-            preview_tool_button(assets::ICON_MINUS, false, enabled).on_click(cx.listener(
-                |root, _: &ClickEvent, _window, cx| {
+            preview_tool_button(assets::ICON_MINUS, false, enabled, window, cx).on_click(
+                cx.listener(|root, _: &ClickEvent, _window, cx| {
                     if root.zoom_preview_canvas(PreviewCanvasZoomDirection::Out, cx) {
                         cx.notify();
                     }
-                },
-            )),
+                }),
+            ),
         )
         .child(
-            preview_tool_button(assets::ICON_PLUS, false, enabled).on_click(cx.listener(
-                |root, _: &ClickEvent, _window, cx| {
+            preview_tool_button(assets::ICON_PLUS, false, enabled, window, cx).on_click(
+                cx.listener(|root, _: &ClickEvent, _window, cx| {
                     if root.zoom_preview_canvas(PreviewCanvasZoomDirection::In, cx) {
                         cx.notify();
                     }
-                },
-            )),
+                }),
+            ),
         )
 }
 
@@ -144,6 +153,8 @@ pub(in crate::app) fn preview_tool_button(
     icon: &'static str,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let variant = if selected {
         ButtonVariant::Default
@@ -152,41 +163,36 @@ pub(in crate::app) fn preview_tool_button(
     };
     let colors = button_colors(variant, selected, enabled);
     let button_id = format!("preview-tool-{}", icon.replace(['/', '.'], "-"));
+    let animated = animated_button_colors(button_id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(button_id.clone())
-        .group(button_id.clone())
         .w(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .h(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(colors.background))
-        .text_color(color(colors.foreground))
+        .bg(background)
+        .text_color(foreground)
         .opacity(colors.opacity)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
         .when(!enabled, |this| this.cursor_not_allowed())
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| {
-                style
-                    .bg(color(colors.active_background))
-                    .text_color(color(colors.hover_foreground))
-            })
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| {
+                    style
+                        .bg(color(colors.active_background))
+                        .text_color(color(colors.hover_foreground))
+                })
         })
-        .child(icon_svg_with_hover(
-            icon,
-            PREVIEW_TOOLBAR_ICON_SIZE,
-            color(colors.foreground),
-            button_id,
-            color(colors.hover_foreground),
-        ))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
+        .child(icon_svg(icon, PREVIEW_TOOLBAR_ICON_SIZE, foreground))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })

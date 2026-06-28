@@ -26,7 +26,7 @@ pub(in crate::app) fn settings_video_tab(
     settings_disabled: bool,
     available_encoders: &AvailableEncoders,
     focuses: SettingsVideoInputFocuses<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let is_gif_mode = is_gif_container(&config.container);
@@ -45,21 +45,29 @@ pub(in crate::app) fn settings_video_tab(
         .child(settings_video_scaling_section(
             config,
             settings_disabled,
+            window,
             cx,
         ));
 
-    content = content.child(settings_video_fps_section(config, settings_disabled, cx));
+    content = content.child(settings_video_fps_section(
+        config,
+        settings_disabled,
+        window,
+        cx,
+    ));
 
     if is_gif_mode {
         return content
             .child(settings_video_gif_colors_section(
                 config,
                 settings_disabled,
+                window,
                 cx,
             ))
             .child(settings_video_gif_dither_section(
                 config,
                 settings_disabled,
+                window,
                 cx,
             ))
             .child(settings_video_gif_loop_section(
@@ -76,15 +84,22 @@ pub(in crate::app) fn settings_video_tab(
             config,
             settings_disabled,
             available_encoders,
+            window,
             cx,
         ))
         .child(settings_video_pixel_format_section(
             config,
             settings_disabled,
+            window,
             cx,
         ))
         .when(!is_videotoolbox_video_codec(&config.video_codec), |this| {
-            this.child(settings_video_preset_section(config, settings_disabled, cx))
+            this.child(settings_video_preset_section(
+                config,
+                settings_disabled,
+                window,
+                cx,
+            ))
         })
         .child(settings_video_quality_section(
             config,
@@ -113,12 +128,13 @@ pub(in crate::app) fn settings_video_resolution_section(
     settings_disabled: bool,
     video_width_focus: Option<&FocusHandle>,
     video_height_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut section = settings_section("RESOLUTION & FRAMERATE").child(settings_resolution_grid(
         config,
         settings_disabled,
+        window,
         cx,
     ));
 
@@ -139,6 +155,7 @@ pub(in crate::app) fn settings_video_resolution_section(
 pub(in crate::app) fn settings_resolution_grid(
     config: &ConversionConfig,
     disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(2).gap_2();
@@ -151,6 +168,8 @@ pub(in crate::app) fn settings_resolution_grid(
                 label,
                 selected,
                 !disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -171,7 +190,7 @@ fn settings_custom_dimensions_grid(
     disabled: bool,
     video_width_focus: Option<&FocusHandle>,
     video_height_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -222,6 +241,7 @@ fn settings_custom_dimensions_grid(
 pub(in crate::app) fn settings_video_scaling_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let disabled = settings_disabled || config.resolution == "original";
@@ -233,6 +253,8 @@ pub(in crate::app) fn settings_video_scaling_section(
                 scaling_algorithm_label(algorithm),
                 config.scaling_algorithm == *algorithm,
                 !disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -253,6 +275,7 @@ pub(in crate::app) fn settings_video_scaling_section(
 pub(in crate::app) fn settings_video_fps_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let is_gif = is_gif_container(&config.container);
@@ -264,6 +287,8 @@ pub(in crate::app) fn settings_video_fps_section(
                 fps_label(fps),
                 config.fps == *fps,
                 !settings_disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -283,6 +308,7 @@ pub(in crate::app) fn settings_video_fps_section(
 pub(in crate::app) fn settings_video_gif_colors_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(2).gap_2();
@@ -293,6 +319,8 @@ pub(in crate::app) fn settings_video_gif_colors_section(
                 colors.to_string(),
                 config.gif_colors == *colors,
                 !settings_disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -312,6 +340,7 @@ pub(in crate::app) fn settings_video_gif_colors_section(
 pub(in crate::app) fn settings_video_gif_dither_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -324,6 +353,8 @@ pub(in crate::app) fn settings_video_gif_dither_section(
                 dither.to_string(),
                 config.gif_dither == dither,
                 !settings_disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -344,7 +375,7 @@ fn settings_video_gif_loop_section(
     config: &ConversionConfig,
     settings_disabled: bool,
     gif_loop_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     settings_section("LOOP COUNT")
@@ -367,6 +398,7 @@ fn settings_video_encoder_section(
     config: &ConversionConfig,
     settings_disabled: bool,
     available_encoders: &AvailableEncoders,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -380,6 +412,8 @@ fn settings_video_encoder_section(
                 option.disabled_reason.unwrap_or(option.label).to_string(),
                 option.is_selected,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -399,6 +433,7 @@ fn settings_video_encoder_section(
 fn settings_video_pixel_format_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -412,6 +447,8 @@ fn settings_video_pixel_format_section(
                 option.caption,
                 option.is_selected,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -431,6 +468,7 @@ fn settings_video_pixel_format_section(
 fn settings_video_preset_section(
     config: &ConversionConfig,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -444,6 +482,8 @@ fn settings_video_preset_section(
                 option.caption,
                 option.is_selected,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -464,12 +504,13 @@ fn settings_video_quality_section(
     config: &ConversionConfig,
     settings_disabled: bool,
     video_bitrate_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut section = settings_section("QUALITY CONTROL").child(settings_video_bitrate_mode_grid(
         config,
         settings_disabled,
+        window,
         cx,
     ));
 
@@ -540,6 +581,7 @@ fn settings_video_quality_section(
 fn settings_video_bitrate_mode_grid(
     config: &ConversionConfig,
     disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(2).gap_2();
@@ -550,6 +592,8 @@ fn settings_video_bitrate_mode_grid(
                 label,
                 config.video_bitrate_mode == mode,
                 !disabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();

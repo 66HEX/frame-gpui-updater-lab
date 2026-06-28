@@ -164,6 +164,7 @@ pub(in crate::app) fn preview_overlay_layer(
 
 pub(in crate::app) fn preview_overlay_controls(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> Option<gpui::Div> {
     let overlay = state.overlay.overlay.as_ref()?;
@@ -187,6 +188,8 @@ pub(in crate::app) fn preview_overlay_controls(
                 assets::ICON_FILE_IMAGE,
                 ButtonVariant::Ghost,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 root.prompt_selected_overlay_image(cx);
@@ -199,6 +202,8 @@ pub(in crate::app) fn preview_overlay_controls(
                 assets::ICON_MINUS,
                 ButtonVariant::Ghost,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 if root.nudge_selected_overlay_size(OverlaySizeDirection::Decrease, media) {
@@ -212,6 +217,8 @@ pub(in crate::app) fn preview_overlay_controls(
                 assets::ICON_PLUS,
                 ButtonVariant::Ghost,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 if root.nudge_selected_overlay_size(OverlaySizeDirection::Increase, media) {
@@ -229,6 +236,8 @@ pub(in crate::app) fn preview_overlay_controls(
                 enabled,
                 PREVIEW_TOOLBAR_BUTTON_SIZE,
                 PREVIEW_TOOLBAR_ICON_SIZE,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.remove_selected_overlay() {
@@ -242,6 +251,8 @@ pub(in crate::app) fn preview_overlay_controls(
                 assets::ICON_CHECK,
                 ButtonVariant::Default,
                 enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.set_selected_overlay_mode(false) {
@@ -360,43 +371,40 @@ fn preview_overlay_icon_button(
     icon: &'static str,
     variant: ButtonVariant,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(variant, false, enabled);
     let button_id = format!("preview-overlay-{id}");
+    let animated = animated_button_colors(button_id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(button_id.clone())
-        .group(button_id.clone())
         .w(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .h(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(colors.background))
-        .text_color(color(colors.foreground))
+        .bg(background)
+        .text_color(foreground)
         .opacity(colors.opacity)
         .when(!enabled, |this| this.cursor_not_allowed())
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| {
-                style
-                    .bg(color(colors.active_background))
-                    .text_color(color(colors.hover_foreground))
-            })
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| {
+                    style
+                        .bg(color(colors.active_background))
+                        .text_color(color(colors.hover_foreground))
+                })
         })
-        .child(icon_svg_with_hover(
-            icon,
-            PREVIEW_TOOLBAR_ICON_SIZE,
-            color(colors.foreground),
-            button_id,
-            color(colors.hover_foreground),
-        ))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
+        .child(icon_svg(icon, PREVIEW_TOOLBAR_ICON_SIZE, foreground))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })

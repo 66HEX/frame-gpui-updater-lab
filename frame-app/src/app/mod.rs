@@ -129,17 +129,17 @@ use frame_core::capabilities::AvailableEncoders;
 use frame_core::events::ConversionEvent;
 use frame_core::types::DEFAULT_MAX_CONCURRENCY;
 use gpui::{
-    App, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, DragMoveEvent, Element, ElementId,
-    ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, GlobalElementId,
-    InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, PaintQuad, PinchEvent, Pixels,
-    PlatformInput, Point, Position, PromptButton, PromptLevel, Render, RenderImage, Rgba,
-    ScrollDelta, ScrollHandle, ScrollStrategy, ScrollWheelEvent, ShapedLine, SharedString,
-    StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
-    UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowOptions, actions, canvas, deferred, div, ease_out_quint, fill, hsla,
-    img, linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg,
-    uniform_list,
+    App, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, DispatchPhase, DragMoveEvent,
+    Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, ExternalPaths,
+    FileDropEvent, FocusHandle, GlobalElementId, InteractiveElement, IntoElement, KeyBinding,
+    LayoutId, Lerp, Menu, MenuItem, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ObjectFit, PaintQuad, PinchEvent, Pixels, PlatformInput, Point, Position, PromptButton,
+    PromptLevel, Render, RenderImage, Rgba, ScrollDelta, ScrollHandle, ScrollStrategy,
+    ScrollWheelEvent, ShapedLine, SharedString, StatefulInteractiveElement, Style, Task, TextRun,
+    TitlebarOptions, UTF16Selection, UniformListScrollHandle, Window, WindowBackgroundAppearance,
+    WindowBounds, WindowControlArea, WindowDecorations, WindowOptions, actions, canvas, deferred,
+    div, ease_out_quint, fill, hsla, img, linear_color_stop, linear_gradient, point, prelude::*,
+    px, relative, size, svg, uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
@@ -224,6 +224,7 @@ pub struct FrameRoot {
     logs_follow_tail: bool,
     is_processing: bool,
     settings_ui: SettingsUiState,
+    drag_drop_ui: DragDropUiState,
     max_concurrency: usize,
     text_input_ui: FrameTextInputUiState,
     source_metadata: SourceMetadataStore,
@@ -238,6 +239,12 @@ pub struct FrameRoot {
     native_titlebar_controls_hidden: bool,
     next_file_sequence: u64,
     persistence: Option<AppPersistence>,
+}
+
+#[derive(Default)]
+struct DragDropUiState {
+    is_open: bool,
+    is_present: bool,
 }
 
 struct SettingsUiState {

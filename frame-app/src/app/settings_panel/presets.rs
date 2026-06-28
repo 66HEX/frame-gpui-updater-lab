@@ -12,7 +12,7 @@ pub(in crate::app) struct SettingsPresetsTabState<'a> {
 
 pub(in crate::app) fn settings_presets_tab(
     state: SettingsPresetsTabState<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut list = div().grid().grid_cols(1);
@@ -67,7 +67,7 @@ fn settings_presets_save_row(
     preset_name: &str,
     settings_disabled: bool,
     preset_name_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let save_enabled = !settings_disabled && !preset_name.trim().is_empty();
@@ -86,11 +86,12 @@ fn settings_presets_save_row(
             window,
             cx,
         )))
-        .child(settings_save_preset_button(save_enabled, cx))
+        .child(settings_save_preset_button(save_enabled, window, cx))
 }
 
 fn settings_save_preset_button(
     enabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     frame_text_button(
@@ -99,6 +100,8 @@ fn settings_save_preset_button(
         ButtonVariant::Secondary,
         false,
         enabled,
+        window,
+        cx,
     )
     .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
         cx.stop_propagation();
@@ -111,7 +114,7 @@ fn settings_save_preset_button(
 fn settings_preset_row(
     option: PresetOption,
     settings_disabled: bool,
-    _window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let preset = option.preset;
@@ -122,54 +125,62 @@ fn settings_preset_row(
     let selected = option.is_selected;
     let status = option.status;
 
-    frame_list_item(format!("preset-{}", preset.id), selected, is_enabled)
-        .pr(px(4.0))
-        .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
-            cx.stop_propagation();
-            if is_enabled && root.apply_preset_to_selected(&preset_id) {
-                cx.notify();
-            }
-        }))
-        .child(div().min_w_0().truncate().child(preset.name.clone()))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .pr(px(8.0))
-                        .text_size(px(theme::TEXT_LABEL_SIZE))
-                        .text_color(color(theme::FRAME_GRAY_600))
-                        .child(status.unwrap_or_default()),
-                )
-                .when(option.is_compatible, |this| {
-                    this.child(settings_preset_icon_button(
-                        format!("settings-preset-apply-all-{}", apply_all_id),
-                        assets::ICON_LIST_CHECKS,
-                        FrameIconButtonVariant::Ghost,
-                        !settings_disabled,
-                        move |root, window, cx| {
-                            root.confirm_apply_preset_to_all(apply_all_id.clone(), window, cx);
-                        },
-                        cx,
-                    ))
-                })
-                .when(!preset.built_in, |this| {
-                    this.child(settings_preset_icon_button(
-                        format!("settings-preset-delete-{}", delete_id),
-                        assets::ICON_TRASH,
-                        FrameIconButtonVariant::Destructive,
-                        !settings_disabled,
-                        move |root, _window, cx| {
-                            if root.delete_preset(&delete_id) {
-                                cx.notify();
-                            }
-                        },
-                        cx,
-                    ))
-                }),
-        )
+    frame_list_item(
+        format!("preset-{}", preset.id),
+        selected,
+        is_enabled,
+        window,
+        cx,
+    )
+    .pr(px(4.0))
+    .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+        cx.stop_propagation();
+        if is_enabled && root.apply_preset_to_selected(&preset_id) {
+            cx.notify();
+        }
+    }))
+    .child(div().min_w_0().truncate().child(preset.name.clone()))
+    .child(
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(
+                div()
+                    .pr(px(8.0))
+                    .text_size(px(theme::TEXT_LABEL_SIZE))
+                    .text_color(color(theme::FRAME_GRAY_600))
+                    .child(status.unwrap_or_default()),
+            )
+            .when(option.is_compatible, |this| {
+                this.child(settings_preset_icon_button(
+                    format!("settings-preset-apply-all-{}", apply_all_id),
+                    assets::ICON_LIST_CHECKS,
+                    FrameIconButtonVariant::Ghost,
+                    !settings_disabled,
+                    move |root, window, cx| {
+                        root.confirm_apply_preset_to_all(apply_all_id.clone(), window, cx);
+                    },
+                    window,
+                    cx,
+                ))
+            })
+            .when(!preset.built_in, |this| {
+                this.child(settings_preset_icon_button(
+                    format!("settings-preset-delete-{}", delete_id),
+                    assets::ICON_TRASH,
+                    FrameIconButtonVariant::Destructive,
+                    !settings_disabled,
+                    move |root, _window, cx| {
+                        if root.delete_preset(&delete_id) {
+                            cx.notify();
+                        }
+                    },
+                    window,
+                    cx,
+                ))
+            }),
+    )
 }
 
 fn settings_preset_icon_button(
@@ -178,6 +189,7 @@ fn settings_preset_icon_button(
     variant: FrameIconButtonVariant,
     enabled: bool,
     action: impl Fn(&mut FrameRoot, &mut Window, &mut Context<FrameRoot>) + 'static,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     frame_icon_button(
@@ -187,6 +199,8 @@ fn settings_preset_icon_button(
         enabled,
         FRAME_ICON_BUTTON_SM_SIZE,
         FRAME_ICON_SM_SIZE,
+        window,
+        cx,
     )
     .on_click(cx.listener(move |root, _: &ClickEvent, window, cx| {
         cx.stop_propagation();

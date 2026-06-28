@@ -9,7 +9,7 @@ pub(in crate::app) fn settings_panel(
         resolve_active_settings_tab(settings.active_tab, settings.config, settings.metadata);
     let mut tab_rail = div().flex().items_center().justify_start().gap_1();
     for tab in visible_settings_tabs(settings.config, settings.metadata) {
-        tab_rail = tab_rail.child(settings_tab_button(tab, active_tab == tab, cx));
+        tab_rail = tab_rail.child(settings_tab_button(tab, active_tab == tab, window, cx));
     }
 
     div()
@@ -44,15 +44,27 @@ pub(in crate::app) fn settings_panel(
 pub(in crate::app) fn settings_tab_button(
     tab: SettingsTab,
     selected: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let colors = button_colors(ButtonVariant::Secondary, selected, true);
     let tab_id = format!("settings-tab-{}", tab.id());
-    let icon_color = if selected {
-        color(theme::FOREGROUND)
+    let hover_transition = hover_motion(format!("{tab_id}-hover"), window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    let background = if selected {
+        mix_color(colors.background, colors.hover_background, hover_progress)
     } else {
-        color(theme::FRAME_GRAY_600)
+        mix_color(theme::TRANSPARENT, theme::FRAME_GRAY_100, hover_progress)
     };
+    let foreground = mix_color(
+        if selected {
+            theme::FOREGROUND
+        } else {
+            theme::FRAME_GRAY_600
+        },
+        theme::FOREGROUND,
+        hover_progress,
+    );
 
     div()
         .id(tab_id.clone())
@@ -63,24 +75,14 @@ pub(in crate::app) fn settings_tab_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(if selected {
-            color(colors.background)
-        } else {
-            color(theme::TRANSPARENT)
-        })
-        .text_color(icon_color)
+        .bg(background)
+        .text_color(foreground)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
-        .hover(move |style| {
-            style
-                .bg(color(if selected {
-                    colors.hover_background
-                } else {
-                    theme::FRAME_GRAY_100
-                }))
-                .text_color(color(theme::FOREGROUND))
-                .cursor_pointer()
-        })
+        .hover(|style| style.cursor_pointer())
         .active(move |style| style.bg(color(colors.active_background)))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
@@ -89,12 +91,10 @@ pub(in crate::app) fn settings_tab_button(
             cx.stop_propagation();
             cx.notify();
         }))
-        .child(icon_svg_with_hover(
+        .child(icon_svg(
             settings_tab_icon(tab),
             SETTINGS_TAB_ICON_SIZE,
-            icon_color,
-            tab_id,
-            color(theme::FOREGROUND),
+            foreground,
         ))
 }
 

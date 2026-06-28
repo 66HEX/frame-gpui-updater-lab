@@ -23,23 +23,32 @@ impl FrameTitlebarPlatform {
     }
 }
 
-pub(super) fn titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
-    titlebar_for_platform(FrameTitlebarPlatform::current(), state, cx)
+pub(super) fn titlebar(
+    state: FrameAppState,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
+    titlebar_for_platform(FrameTitlebarPlatform::current(), state, window, cx)
 }
 
 pub(super) fn titlebar_for_platform(
     platform: FrameTitlebarPlatform,
     state: FrameAppState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     match platform {
-        FrameTitlebarPlatform::Macos => macos_titlebar(state, cx),
-        FrameTitlebarPlatform::Windows => windows_titlebar(state, cx),
-        FrameTitlebarPlatform::Linux => linux_titlebar(state, cx),
+        FrameTitlebarPlatform::Macos => macos_titlebar(state, window, cx),
+        FrameTitlebarPlatform::Windows => windows_titlebar(state, window, cx),
+        FrameTitlebarPlatform::Linux => linux_titlebar(state, window, cx),
     }
 }
 
-pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn macos_titlebar(
+    state: FrameAppState,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     div()
         .h(px(TITLEBAR_HEIGHT))
         .w_full()
@@ -59,7 +68,7 @@ pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
                 .child(macos_window_controls(cx))
                 .child(frame_logo())
                 .child(titlebar_divider())
-                .child(titlebar_navigation(state.active_view, cx))
+                .child(titlebar_navigation(state.active_view, window, cx))
                 .child(titlebar_divider())
                 .child(titlebar_stats(state)),
         )
@@ -70,25 +79,36 @@ pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
                 .mt_2()
                 .gap_2()
                 .child(
-                    action_button(assets::ICON_SETTINGS, None, ButtonVariant::Secondary, true)
-                        .id("titlebar-settings")
-                        .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                    action_button(
+                        "titlebar-settings",
+                        assets::ICON_SETTINGS,
+                        None,
+                        ButtonVariant::Secondary,
+                        true,
+                        window,
+                        cx,
+                    )
+                    .on_click(cx.listener(
+                        |root, _: &ClickEvent, _window, cx| {
                             if root.settings_ui.is_open {
                                 root.close_app_settings();
                             } else {
                                 root.open_app_settings();
                             }
                             cx.notify();
-                        })),
+                        },
+                    )),
                 )
                 .child(
                     action_button(
+                        "titlebar-add-source",
                         assets::ICON_PLUS,
                         Some("ADD SOURCE"),
                         ButtonVariant::Secondary,
                         true,
+                        window,
+                        cx,
                     )
-                    .id("titlebar-add-source")
                     .on_click(cx.listener(
                         |root, _: &ClickEvent, _window, cx| {
                             cx.stop_propagation();
@@ -98,6 +118,7 @@ pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
                 )
                 .child(
                     action_button(
+                        "titlebar-start",
                         assets::ICON_PLAY,
                         Some(if state.is_processing {
                             "PROCESSING"
@@ -106,8 +127,9 @@ pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
                         }),
                         ButtonVariant::Default,
                         state.can_start_conversion(),
+                        window,
+                        cx,
                     )
-                    .id("titlebar-start")
                     .on_click(cx.listener(
                         move |root, _: &ClickEvent, _window, cx| {
                             cx.stop_propagation();
@@ -120,7 +142,11 @@ pub(super) fn macos_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
         )
 }
 
-pub(super) fn windows_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn windows_titlebar(
+    state: FrameAppState,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     div()
         .relative()
         .h(px(TITLEBAR_HEIGHT))
@@ -128,11 +154,15 @@ pub(super) fn windows_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>
         .flex_none()
         .window_control_area(WindowControlArea::Drag)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .child(platform_titlebar_content(state, cx))
-        .child(windows_window_controls(cx))
+        .child(platform_titlebar_content(state, window, cx))
+        .child(windows_window_controls(window, cx))
 }
 
-pub(super) fn linux_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn linux_titlebar(
+    state: FrameAppState,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     div()
         .relative()
         .h(px(TITLEBAR_HEIGHT))
@@ -140,12 +170,13 @@ pub(super) fn linux_titlebar(state: FrameAppState, cx: &mut Context<FrameRoot>) 
         .flex_none()
         .window_control_area(WindowControlArea::Drag)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .child(platform_titlebar_content(state, cx))
-        .child(linux_window_controls(cx))
+        .child(platform_titlebar_content(state, window, cx))
+        .child(linux_window_controls(window, cx))
 }
 
 pub(super) fn platform_titlebar_content(
     state: FrameAppState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -170,7 +201,7 @@ pub(super) fn platform_titlebar_content(
                         .gap_6()
                         .child(platform_frame_logo())
                         .child(platform_titlebar_divider())
-                        .child(titlebar_navigation(state.active_view, cx))
+                        .child(titlebar_navigation(state.active_view, window, cx))
                         .child(platform_titlebar_divider())
                         .child(titlebar_stats(state)),
                 )
@@ -181,34 +212,49 @@ pub(super) fn platform_titlebar_content(
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(titlebar_settings_button(cx))
-                        .child(titlebar_add_source_button(cx))
-                        .child(titlebar_start_button(state, cx)),
+                        .child(titlebar_settings_button(window, cx))
+                        .child(titlebar_add_source_button(window, cx))
+                        .child(titlebar_start_button(state, window, cx)),
                 ),
         )
 }
 
-pub(super) fn titlebar_settings_button(cx: &mut Context<FrameRoot>) -> impl IntoElement {
-    action_button(assets::ICON_SETTINGS, None, ButtonVariant::Secondary, true)
-        .id("titlebar-settings")
-        .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
-            if root.settings_ui.is_open {
-                root.close_app_settings();
-            } else {
-                root.open_app_settings();
-            }
-            cx.notify();
-        }))
+pub(super) fn titlebar_settings_button(
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    action_button(
+        "titlebar-settings",
+        assets::ICON_SETTINGS,
+        None,
+        ButtonVariant::Secondary,
+        true,
+        window,
+        cx,
+    )
+    .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+        if root.settings_ui.is_open {
+            root.close_app_settings();
+        } else {
+            root.open_app_settings();
+        }
+        cx.notify();
+    }))
 }
 
-pub(super) fn titlebar_add_source_button(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+pub(super) fn titlebar_add_source_button(
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
     action_button(
+        "titlebar-add-source",
         assets::ICON_PLUS,
         Some("ADD SOURCE"),
         ButtonVariant::Secondary,
         true,
+        window,
+        cx,
     )
-    .id("titlebar-add-source")
     .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
         cx.stop_propagation();
         root.prompt_add_source(cx);
@@ -217,9 +263,11 @@ pub(super) fn titlebar_add_source_button(cx: &mut Context<FrameRoot>) -> impl In
 
 pub(super) fn titlebar_start_button(
     state: FrameAppState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     action_button(
+        "titlebar-start",
         assets::ICON_PLAY,
         Some(if state.is_processing {
             "PROCESSING"
@@ -228,8 +276,9 @@ pub(super) fn titlebar_start_button(
         }),
         ButtonVariant::Default,
         state.can_start_conversion(),
+        window,
+        cx,
     )
-    .id("titlebar-start")
     .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
         cx.stop_propagation();
         if state.can_start_conversion() {
@@ -323,7 +372,7 @@ pub(super) fn app_settings_sheet(
                         .text_color(color(theme::FOREGROUND))
                         .child("SETTINGS")
                         .child(
-                            app_settings_close_button().on_click(
+                            app_settings_close_button(window, cx).on_click(
                                 cx.listener(|root, _: &ClickEvent, _window, cx| {
                                     cx.stop_propagation();
                                     root.close_app_settings();
@@ -369,7 +418,7 @@ pub(super) fn app_settings_concurrency_control(
     draft_max_concurrency: &str,
     can_apply: bool,
     value_focus: &FocusHandle,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -388,19 +437,28 @@ pub(super) fn app_settings_concurrency_control(
             window,
             cx,
         )))
-        .child(app_settings_apply_button(can_apply).on_click(cx.listener(
-            move |root, _: &ClickEvent, _window, cx| {
-                cx.stop_propagation();
-                if can_apply && root.apply_max_concurrency_draft() {
-                    cx.notify();
-                }
-            },
-        )))
+        .child(
+            app_settings_apply_button(can_apply, window, cx).on_click(cx.listener(
+                move |root, _: &ClickEvent, _window, cx| {
+                    cx.stop_propagation();
+                    if can_apply && root.apply_max_concurrency_draft() {
+                        cx.notify();
+                    }
+                },
+            )),
+        )
 }
 
-pub(super) fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
+pub(super) fn app_settings_close_button(
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(ButtonVariant::Ghost, false, true);
     let close_id = "app-settings-close";
+    let animated = animated_button_colors(close_id, colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(close_id)
@@ -411,53 +469,80 @@ pub(super) fn app_settings_close_button() -> gpui::Stateful<gpui::Div> {
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(colors.background))
-        .text_color(color(colors.foreground))
-        .hover(move |style| {
-            style
-                .bg(color(colors.hover_background))
-                .text_color(color(colors.hover_foreground))
-                .cursor_pointer()
-        })
+        .bg(background)
+        .text_color(foreground)
+        .hover(|style| style.cursor_pointer())
         .active(move |style| style.bg(color(colors.active_background)))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
-        .child(icon_svg_with_hover(
+        .child(icon_svg(
             assets::ICON_CLOSE,
             FILE_LIST_ACTION_ICON_SIZE,
-            color(colors.foreground),
-            close_id,
-            color(colors.hover_foreground),
+            foreground,
         ))
 }
 
-pub(super) fn app_settings_apply_button(enabled: bool) -> gpui::Stateful<gpui::Div> {
+pub(super) fn app_settings_apply_button(
+    enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Stateful<gpui::Div> {
     frame_text_button(
         "app-settings-max-concurrency-apply",
         "APPLY",
         ButtonVariant::Secondary,
         false,
         enabled,
+        window,
+        cx,
     )
 }
 
-pub(super) fn drag_drop_overlay(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+pub(super) fn drag_drop_overlay(
+    is_open: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
+    let transition = window
+        .use_keyed_transition(
+            "drag-drop-overlay-motion",
+            cx,
+            SETTINGS_SHEET_MOTION_DURATION,
+            |_window, _cx| 0.0_f32,
+        )
+        .with_easing(ease_out_quint());
+    set_motion_target(&transition, motion_target(is_open), cx);
+    let progress = *transition.evaluate(window, cx);
+
+    if !is_open && motion_is_hidden(progress) {
+        cx.defer_in(window, |root, _window, cx| {
+            if root.finish_drag_drop_overlay_close() {
+                cx.notify();
+            }
+        });
+    }
+
     div()
         .id("drag-drop-overlay")
-        .invisible()
         .absolute()
         .inset_0()
         .flex()
         .items_center()
         .justify_center()
         .p_4()
-        .bg(color(theme::BACKGROUND.with_alpha(0.60)))
-        .backdrop_blur(px(4.0))
-        .group_drag_over::<ExternalPaths>(ROOT_DROP_GROUP, |style| style.visible())
+        .bg(color(theme::BACKGROUND.with_alpha(0.60 * progress)))
+        .backdrop_blur(px(4.0 * progress))
+        .opacity(progress)
+        .occlude()
         .on_drop(cx.listener(|root, paths: &ExternalPaths, _window, cx| {
             cx.stop_propagation();
+            root.close_drag_drop_overlay();
             root.import_source_paths(paths.paths().to_vec(), cx);
+            cx.notify();
         }))
         .child(
             div()
@@ -530,7 +615,10 @@ pub(super) fn macos_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
         )
 }
 
-pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn windows_window_controls(
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> gpui::Div {
     div()
         .absolute()
         .top_0()
@@ -547,6 +635,8 @@ pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div 
                 TITLEBAR_HEIGHT,
                 0.0,
                 false,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Min)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -563,6 +653,8 @@ pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div 
                 TITLEBAR_HEIGHT,
                 0.0,
                 false,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Max)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -579,6 +671,8 @@ pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div 
                 TITLEBAR_HEIGHT,
                 0.0,
                 true,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Close)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -588,7 +682,7 @@ pub(super) fn windows_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div 
         )
 }
 
-pub(super) fn linux_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
+pub(super) fn linux_window_controls(window: &mut Window, cx: &mut Context<FrameRoot>) -> gpui::Div {
     div()
         .absolute()
         .top_0()
@@ -607,6 +701,8 @@ pub(super) fn linux_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
                 TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
                 theme::RADIUS_SM,
                 false,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Min)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -623,6 +719,8 @@ pub(super) fn linux_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
                 TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
                 theme::RADIUS_SM,
                 false,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Max)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -639,6 +737,8 @@ pub(super) fn linux_window_controls(cx: &mut Context<FrameRoot>) -> gpui::Div {
                 TITLEBAR_LINUX_WINDOW_BUTTON_SIZE,
                 theme::RADIUS_SM,
                 true,
+                window,
+                cx,
             )
             .window_control_area(WindowControlArea::Close)
             .on_click(cx.listener(|_, _: &ClickEvent, window, cx| {
@@ -656,6 +756,8 @@ pub(super) fn titlebar_window_button(
     height: f32,
     radius: f32,
     destructive: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let hover_background = if destructive {
         theme::FRAME_RED
@@ -669,35 +771,38 @@ pub(super) fn titlebar_window_button(
     };
     let hover_foreground = theme::FOREGROUND;
     let foreground = theme::FRAME_GRAY_600;
+    let colors = ButtonColors {
+        background: theme::TRANSPARENT,
+        hover_background,
+        active_background,
+        foreground,
+        hover_foreground,
+        opacity: 1.0,
+    };
+    let animated = animated_button_colors(id, colors, window, cx);
+    let background = animated.background;
+    let icon_color = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
         .id(id)
-        .group(id)
         .w(px(width))
         .h(px(height))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(radius))
-        .bg(color(theme::TRANSPARENT))
-        .text_color(color(foreground))
-        .hover(move |style| {
-            style
-                .bg(color(hover_background))
-                .text_color(color(hover_foreground))
-                .cursor_pointer()
-        })
+        .bg(background)
+        .text_color(icon_color)
+        .hover(|style| style.cursor_pointer())
         .active(move |style| style.bg(color(active_background)))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
-        .child(icon_svg_with_hover(
-            icon,
-            icon_size,
-            color(foreground),
-            id,
-            color(hover_foreground),
-        ))
+        .child(icon_svg(icon, icon_size, icon_color))
 }
 
 pub(super) fn traffic_light(
@@ -778,6 +883,7 @@ pub(super) fn platform_titlebar_divider() -> gpui::Div {
 
 pub(super) fn titlebar_navigation(
     active_view: ActiveView,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -795,6 +901,7 @@ pub(super) fn titlebar_navigation(
             "WORKSPACE",
             ActiveView::Workspace,
             active_view == ActiveView::Workspace,
+            window,
             cx,
         ))
         .child(titlebar_segment(
@@ -802,6 +909,7 @@ pub(super) fn titlebar_navigation(
             "LOGS",
             ActiveView::Logs,
             active_view == ActiveView::Logs,
+            window,
             cx,
         ))
 }
@@ -840,6 +948,7 @@ pub(super) fn titlebar_segment(
     label: &'static str,
     view: ActiveView,
     selected: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let colors = button_colors(ButtonVariant::Secondary, selected, true);
@@ -847,11 +956,22 @@ pub(super) fn titlebar_segment(
         ActiveView::Workspace => "titlebar-workspace",
         ActiveView::Logs => "titlebar-logs",
     };
-    let icon_color = if selected {
-        color(theme::FOREGROUND)
+    let hover_transition = hover_motion(format!("{segment_id}-hover"), window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    let background = if selected {
+        mix_color(colors.background, colors.hover_background, hover_progress)
     } else {
-        color(theme::FRAME_GRAY_600)
+        mix_color(theme::TRANSPARENT, theme::FRAME_GRAY_100, hover_progress)
     };
+    let foreground = mix_color(
+        if selected {
+            theme::FOREGROUND
+        } else {
+            theme::FRAME_GRAY_600
+        },
+        theme::FOREGROUND,
+        hover_progress,
+    );
 
     div()
         .h(px(TITLEBAR_NAV_BUTTON_HEIGHT))
@@ -862,26 +982,14 @@ pub(super) fn titlebar_segment(
         .id(segment_id)
         .group(segment_id)
         .px_2()
-        .bg(if selected {
-            color(colors.background)
-        } else {
-            color(theme::TRANSPARENT)
-        })
-        .text_color(if selected {
-            color(theme::FOREGROUND)
-        } else {
-            color(theme::FRAME_GRAY_600)
-        })
+        .bg(background)
+        .text_color(foreground)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
-        .hover(move |style| {
-            let style = style.text_color(color(theme::FOREGROUND)).cursor_pointer();
-            if selected {
-                style.bg(color(colors.hover_background))
-            } else {
-                style
-            }
-        })
+        .hover(|style| style.cursor_pointer())
         .active(move |style| style.bg(color(colors.active_background)))
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
@@ -892,13 +1000,7 @@ pub(super) fn titlebar_segment(
             }
             cx.stop_propagation();
         }))
-        .child(icon_svg_with_hover(
-            icon,
-            TITLEBAR_ICON_SIZE,
-            icon_color,
-            segment_id,
-            color(theme::FOREGROUND),
-        ))
+        .child(icon_svg(icon, TITLEBAR_ICON_SIZE, foreground))
         .child(label)
 }
 

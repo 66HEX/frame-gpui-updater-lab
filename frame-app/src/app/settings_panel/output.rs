@@ -6,7 +6,7 @@ pub(in crate::app) fn settings_output_tab(
     settings_disabled: bool,
     output_name: &str,
     output_name_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -19,6 +19,7 @@ pub(in crate::app) fn settings_output_tab(
                     config,
                     metadata,
                     settings_disabled,
+                    window,
                     cx,
                 ))
                 .child(settings_hint_text(config.processing_mode.hint())),
@@ -41,6 +42,7 @@ pub(in crate::app) fn settings_output_tab(
                 config,
                 metadata,
                 settings_disabled,
+                window,
                 cx,
             )),
         )
@@ -50,6 +52,7 @@ pub(in crate::app) fn settings_processing_mode_grid(
     config: &ConversionConfig,
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(2).gap_2();
@@ -62,6 +65,8 @@ pub(in crate::app) fn settings_processing_mode_grid(
                 option.label,
                 option.is_selected,
                 is_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -86,6 +91,7 @@ pub(in crate::app) fn settings_container_grid(
     config: &ConversionConfig,
     metadata: Option<&SourceMetadata>,
     settings_disabled: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut grid = div().grid().grid_cols(2).gap_2();
@@ -98,6 +104,8 @@ pub(in crate::app) fn settings_container_grid(
                 container.to_uppercase(),
                 option.is_selected,
                 is_enabled,
+                window,
+                cx,
             )
             .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
@@ -124,7 +132,7 @@ pub(in crate::app) fn settings_output_name_field(
     output_name: &str,
     disabled: bool,
     output_name_focus: Option<&FocusHandle>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     frame_text_input(

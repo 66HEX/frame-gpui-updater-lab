@@ -185,6 +185,7 @@ pub(in crate::app) fn crop_handle_id(handle: DragHandle) -> &'static str {
 
 pub(in crate::app) fn preview_crop_aspect_bar(
     state: &PreviewShellState,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut bar = div()
@@ -199,20 +200,25 @@ pub(in crate::app) fn preview_crop_aspect_bar(
     for option in ASPECT_OPTIONS {
         let id = option.id;
         bar = bar.child(
-            compact_text_button(option.display, state.crop.crop_aspect == id, true).on_click(
-                cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    if root.select_preview_crop_aspect(id) {
-                        cx.notify();
-                    }
-                }),
-            ),
+            compact_text_button(
+                option.display,
+                state.crop.crop_aspect == id,
+                true,
+                window,
+                cx,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                if root.select_preview_crop_aspect(id) {
+                    cx.notify();
+                }
+            })),
         );
     }
 
     let bar = bar
         .child(preview_toolbar_vertical_separator())
         .child(
-            compact_text_button("Reset", false, true).on_click(cx.listener(
+            compact_text_button("Reset", false, true, window, cx).on_click(cx.listener(
                 |root, _: &ClickEvent, _window, cx| {
                     if root.reset_preview_crop_selection() {
                         cx.notify();
@@ -226,6 +232,8 @@ pub(in crate::app) fn preview_crop_aspect_bar(
                 ButtonVariant::Default,
                 false,
                 state.crop.has_crop_dimensions,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 if root.apply_selected_crop() {
@@ -248,6 +256,8 @@ pub(in crate::app) fn compact_text_button(
     label: &'static str,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let variant = if selected {
         ButtonVariant::Default
@@ -255,7 +265,7 @@ pub(in crate::app) fn compact_text_button(
         ButtonVariant::Ghost
     };
 
-    compact_text_button_variant(label, variant, selected, enabled)
+    compact_text_button_variant(label, variant, selected, enabled, window, cx)
 }
 
 pub(in crate::app) fn compact_text_button_variant(
@@ -263,39 +273,41 @@ pub(in crate::app) fn compact_text_button_variant(
     variant: ButtonVariant,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(variant, selected, enabled);
+    let id = format!("preview-crop-action-{}", label.to_ascii_lowercase());
+    let animated = animated_button_colors(id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
 
     div()
-        .id(format!(
-            "preview-crop-action-{}",
-            label.to_ascii_lowercase()
-        ))
+        .id(id)
         .h(px(PREVIEW_TIMELINE_CONTROL_HEIGHT))
         .px(px(10.0))
         .flex()
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(color(colors.background))
+        .bg(background)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| {
-                style
-                    .bg(color(colors.active_background))
-                    .text_color(color(colors.hover_foreground))
-            })
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| {
+                    style
+                        .bg(color(colors.active_background))
+                        .text_color(color(colors.hover_foreground))
+                })
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })

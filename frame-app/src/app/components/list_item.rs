@@ -4,9 +4,17 @@ pub(in crate::app) fn frame_list_item(
     id: impl Into<String>,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
+    let selected_progress = selected_motion(format!("{id}-selected"), selected, window, cx);
+    let hover_transition = hover_motion(format!("{id}-hover"), window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    let emphasis_progress = selected_progress.max(hover_progress);
+
     div()
-        .id(id.into())
+        .id(id)
         .h(px(SETTINGS_CONTROL_HEIGHT))
         .w_full()
         .flex()
@@ -14,29 +22,30 @@ pub(in crate::app) fn frame_list_item(
         .justify_between()
         .rounded(px(theme::RADIUS_SM))
         .border_l(px(2.0))
-        .border_color(color(if selected {
-            theme::FRAME_GRAY_600
-        } else {
-            theme::TRANSPARENT
-        }))
-        .bg(color(if selected {
-            theme::FRAME_GRAY_100
-        } else {
-            theme::TRANSPARENT
-        }))
-        .pl(px(if selected { 10.0 } else { 8.0 }))
+        .border_color(mix_color(
+            theme::TRANSPARENT,
+            theme::FRAME_GRAY_600,
+            selected_progress,
+        ))
+        .bg(mix_color(
+            theme::TRANSPARENT,
+            theme::FRAME_GRAY_100,
+            selected_progress,
+        ))
+        .pl(px(mix_scalar(8.0, 12.0, selected_progress)))
         .pr(px(12.0))
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(if selected {
-            theme::FOREGROUND
-        } else {
-            theme::FRAME_GRAY_600
-        }))
+        .text_color(mix_color(
+            theme::FRAME_GRAY_600,
+            theme::FOREGROUND,
+            emphasis_progress,
+        ))
         .opacity(if enabled { 1.0 } else { 0.5 })
-        .when(enabled, |this| {
-            this.hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
-        })
+        .when(enabled, |this| this.hover(|style| style.cursor_pointer()))
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })
@@ -48,11 +57,13 @@ pub(in crate::app) fn frame_list_item_with_caption(
     caption: impl Into<String>,
     selected: bool,
     enabled: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let title = title.into();
     let caption = caption.into();
 
-    frame_list_item(id, selected, enabled)
+    frame_list_item(id, selected, enabled, window, cx)
         .gap_3()
         .child(div().text_color(color(theme::FOREGROUND)).child(title))
         .child(
@@ -78,8 +89,15 @@ pub(in crate::app) fn frame_track_list_item(
     selected: bool,
     enabled: bool,
     layout: FrameTrackListItemLayout,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
     let colors = button_colors(ButtonVariant::Secondary, selected, enabled);
+    let animated = animated_button_colors(id.clone(), colors, window, cx);
+    let background = animated.background;
+    let foreground = animated.foreground;
+    let hover_transition = animated.hover_transition;
     let index_label = index_label.into();
     let primary = primary.into();
     let detail = detail.into();
@@ -122,7 +140,7 @@ pub(in crate::app) fn frame_track_list_item(
     };
 
     div()
-        .id(id.into())
+        .id(id)
         .min_h(px(SETTINGS_CONTROL_HEIGHT))
         .w_full()
         .flex()
@@ -132,21 +150,19 @@ pub(in crate::app) fn frame_track_list_item(
         .rounded(px(theme::RADIUS_SM))
         .px(px(10.0))
         .py(px(6.0))
-        .bg(color(colors.background))
+        .bg(background)
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(color(colors.foreground))
+        .text_color(foreground)
         .opacity(colors.opacity)
         .shadow(button_highlight_shadows())
         .when(enabled, |this| {
-            this.hover(move |style| {
-                style
-                    .bg(color(colors.hover_background))
-                    .text_color(color(colors.hover_foreground))
-                    .cursor_pointer()
-            })
-            .active(move |style| style.bg(color(colors.active_background)))
+            this.hover(|style| style.cursor_pointer())
+                .active(move |style| style.bg(color(colors.active_background)))
         })
         .when(!enabled, |this| this.cursor_not_allowed())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && enabled, cx);
+        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(enabled, window, cx);
         })

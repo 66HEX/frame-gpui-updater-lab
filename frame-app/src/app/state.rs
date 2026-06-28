@@ -81,6 +81,7 @@ impl FrameRoot {
             logs_follow_tail: true,
             is_processing: false,
             settings_ui,
+            drag_drop_ui: DragDropUiState::default(),
             max_concurrency,
             text_input_ui: FrameTextInputUiState::default(),
             source_metadata: SourceMetadataStore::default(),

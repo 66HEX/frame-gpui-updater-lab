@@ -26,7 +26,7 @@ pub(super) fn workspace_view(
                     preview_panel(file_queue, settings, preview_props, window, cx)
                         .row_span(PREVIEW_ROW_SPAN),
                 )
-                .child(file_list_panel(file_queue, cx).row_span(FILE_LIST_ROW_SPAN)),
+                .child(file_list_panel(file_queue, window, cx).row_span(FILE_LIST_ROW_SPAN)),
         )
         .child(settings_panel(settings, window, cx).col_span(RIGHT_COLUMN_SPAN))
 }

@@ -9,6 +9,7 @@ pub(super) fn logs_view(
     conversion_events: &ConversionEventState,
     scroll_handle: &UniformListScrollHandle,
     follow_tail: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let active_files = conversion_events.active_log_files(queue);
@@ -20,13 +21,14 @@ pub(super) fn logs_view(
         .flex_col()
         .overflow_hidden()
         .card_surface()
-        .child(logs_tab_strip(&active_files, selected_id, cx))
+        .child(logs_tab_strip(&active_files, selected_id, window, cx))
         .child(logs_body(
             conversion_events,
             selected_id,
             !active_files.is_empty(),
             scroll_handle,
             follow_tail,
+            window,
             cx,
         ))
 }
@@ -34,6 +36,7 @@ pub(super) fn logs_view(
 pub(super) fn logs_tab_strip(
     active_files: &[ActiveLogFile],
     selected_id: Option<&str>,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let mut tabs = div()
@@ -48,6 +51,7 @@ pub(super) fn logs_tab_strip(
         tabs = tabs.child(log_tab_button(
             file,
             selected_id.is_some_and(|id| id == file.id),
+            window,
             cx,
         ));
     }
@@ -72,20 +76,27 @@ pub(super) fn logs_tab_strip(
 pub(super) fn log_tab_button(
     file: &ActiveLogFile,
     selected: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let file_id = file.id.clone();
+    let hover_transition = hover_motion(element_id("logs-tab-hover", &file.id), window, cx);
+    let hover_progress = *hover_transition.evaluate(window, cx);
+    let foreground = if selected {
+        color(theme::FOREGROUND)
+    } else {
+        color(theme::FRAME_GRAY_600).lerp(&color(theme::FOREGROUND), hover_progress)
+    };
 
     div()
         .id(element_id("logs-tab", &file.id))
         .flex_none()
         .text_size(px(theme::TEXT_LABEL_SIZE))
-        .text_color(if selected {
-            color(theme::FOREGROUND)
-        } else {
-            color(theme::FRAME_GRAY_600)
+        .text_color(foreground)
+        .hover(|style| style.cursor_pointer())
+        .on_hover(move |hover, _window, cx| {
+            retarget_hover_motion(&hover_transition, *hover && !selected, cx);
         })
-        .hover(|style| style.text_color(color(theme::FOREGROUND)).cursor_pointer())
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             button_mouse_down(true, window, cx);
         })
@@ -104,6 +115,7 @@ pub(super) fn logs_body(
     has_active_files: bool,
     scroll_handle: &UniformListScrollHandle,
     follow_tail: bool,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let body = div()
@@ -131,7 +143,7 @@ pub(super) fn logs_body(
     if follow_tail {
         body
     } else {
-        body.child(log_scroll_to_bottom_button(cx))
+        body.child(log_scroll_to_bottom_button(window, cx))
     }
 }
 
@@ -223,7 +235,10 @@ pub(super) fn log_line_row(line: LogLine) -> impl IntoElement {
         )
 }
 
-pub(super) fn log_scroll_to_bottom_button(cx: &mut Context<FrameRoot>) -> impl IntoElement {
+pub(super) fn log_scroll_to_bottom_button(
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> impl IntoElement {
     div()
         .absolute()
         .right(px(LOG_SCROLL_BUTTON_OFFSET))
@@ -240,6 +255,8 @@ pub(super) fn log_scroll_to_bottom_button(cx: &mut Context<FrameRoot>) -> impl I
                 true,
                 LOG_SCROLL_BUTTON_SIZE,
                 LOG_SCROLL_ICON_SIZE,
+                window,
+                cx,
             )
             .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                 cx.stop_propagation();
