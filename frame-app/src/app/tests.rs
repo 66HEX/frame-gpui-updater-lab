@@ -1,7 +1,7 @@
 use super::input::{should_capture_text_input_drag, should_handle_text_input};
 use super::preview_actions::{
     lerp_preview_canvas_value, preview_canvas_initial_zoom, preview_canvas_layout_metrics,
-    preview_canvas_pan_limits,
+    preview_canvas_pan_limits, preview_canvas_transform_settled,
 };
 use super::preview_panel::{
     centered_offset, preview_shell_state, preview_timeline_labels, preview_trim_enabled,
@@ -1371,10 +1371,40 @@ mod frame_root_config {
 
     #[test]
     fn lerp_preview_canvas_value_moves_toward_target_without_overshooting() {
-        let (next, changed) = lerp_preview_canvas_value(1.0, 2.0);
+        let next = lerp_preview_canvas_value(1.0, 2.0);
 
-        assert!(changed);
         assert!(next > 1.0 && next < 2.0);
+    }
+
+    #[test]
+    fn preview_canvas_transform_waits_for_all_axes_to_settle() {
+        assert!(!preview_canvas_transform_settled(
+            1.0, 1.000_01, 10.0, 10.005, -10.0, -10.005,
+        ));
+        assert!(preview_canvas_transform_settled(
+            1.0,
+            1.000_000_5,
+            10.0,
+            10.005,
+            -10.0,
+            -10.005,
+        ));
+    }
+
+    #[test]
+    fn tick_preview_canvas_animation_keeps_pan_moving_until_zoom_settles() {
+        let mut root = FrameRoot::new();
+        root.preview_ui.canvas.current_zoom = 1.0;
+        root.preview_ui.canvas.target_zoom = 1.000_01;
+        root.preview_ui.canvas.current_pan_x = 10.0;
+        root.preview_ui.canvas.target_pan_x = 10.005;
+        root.preview_ui.canvas.current_pan_y = -10.0;
+        root.preview_ui.canvas.target_pan_y = -10.005;
+
+        assert!(root.tick_preview_canvas_animation());
+        assert!(root.preview_ui.canvas.current_zoom > 1.0);
+        assert!(root.preview_ui.canvas.current_pan_x > 10.0);
+        assert!(root.preview_ui.canvas.current_pan_y < -10.0);
     }
 
     #[test]

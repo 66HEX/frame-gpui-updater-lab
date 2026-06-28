@@ -323,16 +323,27 @@ impl FrameRoot {
         true
     }
 
-    fn tick_preview_canvas_animation(&mut self) -> bool {
-        let (next_zoom, zoom_changed) = lerp_preview_canvas_value(
+    pub(super) fn tick_preview_canvas_animation(&mut self) -> bool {
+        if preview_canvas_transform_settled(
+            self.preview_ui.canvas.current_zoom,
+            self.preview_ui.canvas.target_zoom,
+            self.preview_ui.canvas.current_pan_x,
+            self.preview_ui.canvas.target_pan_x,
+            self.preview_ui.canvas.current_pan_y,
+            self.preview_ui.canvas.target_pan_y,
+        ) {
+            return false;
+        }
+
+        let next_zoom = lerp_preview_canvas_value(
             self.preview_ui.canvas.current_zoom,
             self.preview_ui.canvas.target_zoom,
         );
-        let (next_pan_x, pan_x_changed) = lerp_preview_canvas_value(
+        let next_pan_x = lerp_preview_canvas_value(
             self.preview_ui.canvas.current_pan_x,
             self.preview_ui.canvas.target_pan_x,
         );
-        let (next_pan_y, pan_y_changed) = lerp_preview_canvas_value(
+        let next_pan_y = lerp_preview_canvas_value(
             self.preview_ui.canvas.current_pan_y,
             self.preview_ui.canvas.target_pan_y,
         );
@@ -341,7 +352,7 @@ impl FrameRoot {
         self.preview_ui.canvas.current_pan_x = next_pan_x;
         self.preview_ui.canvas.current_pan_y = next_pan_y;
 
-        zoom_changed || pan_x_changed || pan_y_changed
+        true
     }
 
     pub(super) fn sync_preview_playback_for_selection(
@@ -1481,11 +1492,19 @@ pub(in crate::app) fn preview_canvas_pan_limits(
     ))
 }
 
-pub(in crate::app) fn lerp_preview_canvas_value(current: f64, target: f64) -> (f64, bool) {
-    let distance = target - current;
-    if distance.abs() <= PREVIEW_CANVAS_SNAP_EPSILON {
-        return (target, (target - current).abs() > f64::EPSILON);
-    }
+pub(in crate::app) fn lerp_preview_canvas_value(current: f64, target: f64) -> f64 {
+    current + (target - current) * PREVIEW_CANVAS_LERP_FACTOR
+}
 
-    (current + distance * PREVIEW_CANVAS_LERP_FACTOR, true)
+pub(in crate::app) fn preview_canvas_transform_settled(
+    current_zoom: f64,
+    target_zoom: f64,
+    current_pan_x: f64,
+    target_pan_x: f64,
+    current_pan_y: f64,
+    target_pan_y: f64,
+) -> bool {
+    (target_zoom - current_zoom).abs() <= PREVIEW_CANVAS_ZOOM_SNAP_EPSILON
+        && (target_pan_x - current_pan_x).abs() <= PREVIEW_CANVAS_PAN_SNAP_EPSILON
+        && (target_pan_y - current_pan_y).abs() <= PREVIEW_CANVAS_PAN_SNAP_EPSILON
 }
