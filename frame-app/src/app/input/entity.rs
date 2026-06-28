@@ -96,12 +96,16 @@ impl EntityInputHandler for FrameRoot {
         let kind = self.text_input_ui.active?;
         let text = self.text_input_value(kind);
         let range = text_range_from_utf16(&text, &range_utf16);
-        let line = self.text_input_runtime(kind).last_layout.as_ref()?;
+        let runtime = self.text_input_runtime(kind);
+        let line = runtime.last_layout.as_ref()?;
         let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
         Some(Bounds::from_corners(
-            point(bounds.left() + line.x_for_index(range.start), text_top),
             point(
-                bounds.left() + line.x_for_index(range.end),
+                bounds.left() + line.x_for_index(range.start) - runtime.scroll_x,
+                text_top,
+            ),
+            point(
+                bounds.left() + line.x_for_index(range.end) - runtime.scroll_x,
                 text_top + px(TEXT_INPUT_CARET_HEIGHT),
             ),
         ))
@@ -118,7 +122,10 @@ impl EntityInputHandler for FrameRoot {
         let runtime = self.text_input_runtime(kind);
         let bounds = runtime.last_bounds.as_ref()?;
         let line = runtime.last_layout.as_ref()?;
-        let offset = clamp_text_offset(&text, line.closest_index_for_x(point.x - bounds.left()));
+        let offset = clamp_text_offset(
+            &text,
+            line.closest_index_for_x(point.x - bounds.left() + runtime.scroll_x),
+        );
         Some(text_offset_to_utf16(&text, offset))
     }
 

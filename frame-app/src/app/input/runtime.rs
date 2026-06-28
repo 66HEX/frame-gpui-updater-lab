@@ -51,6 +51,7 @@ pub(in crate::app) struct FrameTextInputRuntime {
     pub(in crate::app) marked_range: Option<Range<usize>>,
     pub(in crate::app) last_layout: Option<ShapedLine>,
     pub(in crate::app) last_bounds: Option<Bounds<Pixels>>,
+    pub(in crate::app) scroll_x: Pixels,
     pub(in crate::app) is_selecting: bool,
 }
 
@@ -62,9 +63,39 @@ impl Default for FrameTextInputRuntime {
             marked_range: None,
             last_layout: None,
             last_bounds: None,
+            scroll_x: Pixels::ZERO,
             is_selecting: false,
         }
     }
+}
+
+pub(in crate::app) fn clamp_text_input_scroll_x(
+    scroll_x: Pixels,
+    content_width: Pixels,
+    viewport_width: Pixels,
+) -> Pixels {
+    scroll_x.clamp(
+        Pixels::ZERO,
+        (content_width - viewport_width).max(Pixels::ZERO),
+    )
+}
+
+pub(in crate::app) fn text_input_scroll_x_for_cursor(
+    current: Pixels,
+    cursor_x: Pixels,
+    content_width: Pixels,
+    viewport_width: Pixels,
+) -> Pixels {
+    let mut next = current;
+    let trailing_edge = (viewport_width - px(TEXT_INPUT_CARET_WIDTH)).max(Pixels::ZERO);
+
+    if cursor_x - next > trailing_edge {
+        next = cursor_x - trailing_edge;
+    } else if cursor_x < next {
+        next = cursor_x;
+    }
+
+    clamp_text_input_scroll_x(next, content_width, viewport_width)
 }
 
 #[derive(Default)]

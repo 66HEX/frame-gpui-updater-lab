@@ -1,4 +1,6 @@
-use super::input::{should_capture_text_input_drag, should_handle_text_input};
+use super::input::{
+    should_capture_text_input_drag, should_handle_text_input, text_input_scroll_x_for_cursor,
+};
 use super::preview_actions::{
     lerp_preview_canvas_value, preview_canvas_initial_zoom, preview_canvas_layout_metrics,
     preview_canvas_pan_limits, preview_canvas_transform_settled,
@@ -960,6 +962,27 @@ mod frame_root_conversion {
     fn text_input_outside_mouse_up_captures_only_while_selecting() {
         assert!(!should_capture_text_input_drag(false));
         assert!(should_capture_text_input_drag(true));
+    }
+
+    #[test]
+    fn text_input_scroll_reveals_cursor_past_right_edge() {
+        let scroll_x = text_input_scroll_x_for_cursor(px(0.0), px(180.0), px(240.0), px(120.0));
+
+        assert!(scroll_x > px(0.0));
+    }
+
+    #[test]
+    fn text_input_scroll_reveals_cursor_past_left_edge() {
+        let scroll_x = text_input_scroll_x_for_cursor(px(80.0), px(40.0), px(240.0), px(120.0));
+
+        assert_eq!(scroll_x, px(40.0));
+    }
+
+    #[test]
+    fn text_input_scroll_stays_zero_when_content_fits() {
+        let scroll_x = text_input_scroll_x_for_cursor(px(0.0), px(60.0), px(90.0), px(120.0));
+
+        assert_eq!(scroll_x, px(0.0));
     }
 }
 

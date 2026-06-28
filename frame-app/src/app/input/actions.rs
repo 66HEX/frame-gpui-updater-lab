@@ -417,7 +417,7 @@ impl FrameRoot {
     }
 
     pub(in crate::app) fn text_input_index_for_mouse_position(
-        &self,
+        &mut self,
         kind: FrameTextInputKind,
         position: Point<Pixels>,
     ) -> usize {
@@ -426,21 +426,45 @@ impl FrameRoot {
             return 0;
         }
 
-        let runtime = self.text_input_runtime(kind);
-        let (Some(bounds), Some(line)) =
-            (runtime.last_bounds.as_ref(), runtime.last_layout.as_ref())
-        else {
+        let (Some(bounds), Some(line_width)) = ({
+            let runtime = self.text_input_runtime(kind);
+            (
+                runtime.last_bounds,
+                runtime.last_layout.as_ref().map(ShapedLine::width),
+            )
+        }) else {
             return text.len();
         };
+        let viewport_width = bounds.size.width;
+        let mut local_x = position.x - bounds.left();
 
-        if position.x <= bounds.left() {
-            return 0;
+        {
+            let runtime = self.text_input_runtime_mut(kind);
+            let mut scroll_x =
+                clamp_text_input_scroll_x(runtime.scroll_x, line_width, viewport_width);
+            if position.x < bounds.left() {
+                scroll_x = clamp_text_input_scroll_x(
+                    scroll_x - text_input_drag_scroll_amount(bounds.left() - position.x),
+                    line_width,
+                    viewport_width,
+                );
+                local_x = Pixels::ZERO;
+            } else if position.x > bounds.right() {
+                scroll_x = clamp_text_input_scroll_x(
+                    scroll_x + text_input_drag_scroll_amount(position.x - bounds.right()),
+                    line_width,
+                    viewport_width,
+                );
+                local_x = viewport_width;
+            }
+            runtime.scroll_x = scroll_x;
         }
-        if position.x >= bounds.right() {
+
+        let runtime = self.text_input_runtime(kind);
+        let Some(line) = runtime.last_layout.as_ref() else {
             return text.len();
-        }
-
-        clamp_text_offset(&text, line.closest_index_for_x(position.x - bounds.left()))
+        };
+        clamp_text_offset(&text, line.closest_index_for_x(local_x + runtime.scroll_x))
     }
 
     pub(in crate::app) fn text_input_mouse_down(
@@ -776,6 +800,10 @@ fn metadata_field_for_text_input(kind: FrameTextInputKind) -> Option<MetadataFie
         FrameTextInputKind::MetadataComment => Some(MetadataField::Comment),
         _ => None,
     }
+}
+
+fn text_input_drag_scroll_amount(distance: Pixels) -> Pixels {
+    distance.clamp(px(4.0), px(40.0))
 }
 
 fn normalize_timecode_text_input(candidate: &str) -> Option<Option<String>> {

@@ -12,6 +12,7 @@ pub(super) struct FrameTextInputPrepaintState {
     line: Option<ShapedLine>,
     cursor: Option<PaintQuad>,
     selection: Option<PaintQuad>,
+    scroll_x: Pixels,
 }
 
 pub(in crate::app) const fn should_handle_text_input(
@@ -103,8 +104,22 @@ impl Element for FrameTextInputElement {
             .text_system()
             .shape_line(display_text, font_size, &[run], None);
         let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
-        let cursor_x = line.x_for_index(cursor_offset);
         let focused = self.focus_handle.is_focused(window);
+        let should_reveal_cursor =
+            focused && root.text_input_ui.active == Some(self.kind) && !is_placeholder;
+        let cursor_x = line.x_for_index(cursor_offset);
+        let scroll_x = if is_placeholder {
+            Pixels::ZERO
+        } else if should_reveal_cursor {
+            text_input_scroll_x_for_cursor(
+                runtime.scroll_x,
+                cursor_x,
+                line.width(),
+                bounds.size.width,
+            )
+        } else {
+            clamp_text_input_scroll_x(runtime.scroll_x, line.width(), bounds.size.width)
+        };
         let show_cursor = focused
             && root.text_input_ui.active == Some(self.kind)
             && root.text_input_ui.cursor_visible
@@ -114,7 +129,7 @@ impl Element for FrameTextInputElement {
         let cursor = show_cursor.then(|| {
             fill(
                 Bounds::new(
-                    point(bounds.left() + cursor_x, text_top),
+                    point(bounds.left() + cursor_x - scroll_x, text_top),
                     size(px(TEXT_INPUT_CARET_WIDTH), px(TEXT_INPUT_CARET_HEIGHT)),
                 ),
                 hsla(0.0, 0.0, 1.0, 1.0),
@@ -124,11 +139,11 @@ impl Element for FrameTextInputElement {
             fill(
                 Bounds::from_corners(
                     point(
-                        bounds.left() + line.x_for_index(selected_range.start),
+                        bounds.left() + line.x_for_index(selected_range.start) - scroll_x,
                         text_top,
                     ),
                     point(
-                        bounds.left() + line.x_for_index(selected_range.end),
+                        bounds.left() + line.x_for_index(selected_range.end) - scroll_x,
                         text_top + px(TEXT_INPUT_CARET_HEIGHT),
                     ),
                 ),
@@ -140,6 +155,7 @@ impl Element for FrameTextInputElement {
             line: Some(line),
             cursor,
             selection,
+            scroll_x,
         }
     }
 
@@ -172,30 +188,34 @@ impl Element for FrameTextInputElement {
             }
         });
 
-        if let Some(selection) = prepaint.selection.take() {
-            window.paint_quad(selection);
-        }
-
         let line = prepaint.line.take().expect("input line should be shaped");
         let text_top = bounds.top() + px((SETTINGS_CONTROL_HEIGHT - TEXT_INPUT_CARET_HEIGHT) / 2.0);
-        line.paint(
-            point(bounds.left(), text_top),
-            px(TEXT_INPUT_CARET_HEIGHT),
-            gpui::TextAlign::Left,
-            None,
-            window,
-            cx,
-        )
-        .ok();
+        let scroll_x = prepaint.scroll_x;
+        window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+            if let Some(selection) = prepaint.selection.take() {
+                window.paint_quad(selection);
+            }
 
-        if let Some(cursor) = prepaint.cursor.take() {
-            window.paint_quad(cursor);
-        }
+            line.paint(
+                point(bounds.left() - scroll_x, text_top),
+                px(TEXT_INPUT_CARET_HEIGHT),
+                gpui::TextAlign::Left,
+                None,
+                window,
+                cx,
+            )
+            .ok();
+
+            if let Some(cursor) = prepaint.cursor.take() {
+                window.paint_quad(cursor);
+            }
+        });
 
         self.owner.update(cx, |root, _cx| {
             let runtime = root.text_input_runtime_mut(kind);
             runtime.last_layout = Some(line);
             runtime.last_bounds = Some(bounds);
+            runtime.scroll_x = scroll_x;
         });
     }
 }
