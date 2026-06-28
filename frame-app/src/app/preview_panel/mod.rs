@@ -1,6 +1,9 @@
-use super::input::{FrameTextInputSpec, frame_text_input};
-use super::primitives::*;
 use super::*;
+use super::{
+    components::*,
+    input::{FrameTextInputSpec, frame_text_input},
+    primitives::*,
+};
 
 mod crop;
 mod crop_overlay;

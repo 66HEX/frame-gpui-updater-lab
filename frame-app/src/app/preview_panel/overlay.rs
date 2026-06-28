@@ -2,8 +2,6 @@ use super::*;
 
 const OVERLAY_HANDLE_SIZE: f32 = 10.0;
 const OVERLAY_OPACITY_SLIDER_WIDTH: f32 = 96.0;
-const OVERLAY_OPACITY_TRACK_HEIGHT: f32 = 4.0;
-const OVERLAY_OPACITY_HANDLE_SIZE: f32 = 12.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct PreviewOverlayDrag {
@@ -184,49 +182,69 @@ pub(in crate::app) fn preview_overlay_controls(
         .p(px(4.0))
         .shadow(card_surface_shadows())
         .child(
-            preview_overlay_icon_button("replace", assets::ICON_FILE_IMAGE, enabled).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
-                    root.prompt_selected_overlay_image(cx);
-                }),
-            ),
+            preview_overlay_icon_button(
+                "replace",
+                assets::ICON_FILE_IMAGE,
+                ButtonVariant::Ghost,
+                enabled,
+            )
+            .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                root.prompt_selected_overlay_image(cx);
+            })),
         )
         .child(
-            preview_overlay_icon_button("decrease", assets::ICON_MINUS, enabled).on_click(
-                cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    if root.nudge_selected_overlay_size(OverlaySizeDirection::Decrease, media) {
-                        cx.notify();
-                    }
-                }),
-            ),
+            preview_overlay_icon_button(
+                "decrease",
+                assets::ICON_MINUS,
+                ButtonVariant::Ghost,
+                enabled,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                if root.nudge_selected_overlay_size(OverlaySizeDirection::Decrease, media) {
+                    cx.notify();
+                }
+            })),
         )
         .child(preview_overlay_opacity_slider(overlay.opacity, enabled, cx))
         .child(
-            preview_overlay_icon_button("increase", assets::ICON_PLUS, enabled).on_click(
-                cx.listener(move |root, _: &ClickEvent, _window, cx| {
-                    if root.nudge_selected_overlay_size(OverlaySizeDirection::Increase, media) {
-                        cx.notify();
-                    }
-                }),
-            ),
+            preview_overlay_icon_button(
+                "increase",
+                assets::ICON_PLUS,
+                ButtonVariant::Ghost,
+                enabled,
+            )
+            .on_click(cx.listener(move |root, _: &ClickEvent, _window, cx| {
+                if root.nudge_selected_overlay_size(OverlaySizeDirection::Increase, media) {
+                    cx.notify();
+                }
+            })),
         )
         .child(preview_toolbar_separator().h(px(18.0)).w(px(1.0)))
         .child(
-            preview_overlay_icon_button("done", assets::ICON_CHECK, enabled).on_click(cx.listener(
-                |root, _: &ClickEvent, _window, cx| {
-                    if root.set_selected_overlay_mode(false) {
-                        cx.notify();
-                    }
-                },
-            )),
+            preview_overlay_icon_button(
+                "remove",
+                assets::ICON_TRASH,
+                ButtonVariant::Ghost,
+                enabled,
+            )
+            .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                if root.remove_selected_overlay() {
+                    cx.notify();
+                }
+            })),
         )
         .child(
-            preview_overlay_icon_button("remove", assets::ICON_TRASH, enabled).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
-                    if root.remove_selected_overlay() {
-                        cx.notify();
-                    }
-                }),
-            ),
+            preview_overlay_icon_button(
+                "done",
+                assets::ICON_CHECK,
+                ButtonVariant::Default,
+                enabled,
+            )
+            .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                if root.set_selected_overlay_mode(false) {
+                    cx.notify();
+                }
+            })),
         );
 
     Some(
@@ -337,9 +355,10 @@ fn overlay_handle_id(handle: OverlayDragHandle) -> &'static str {
 fn preview_overlay_icon_button(
     id: &'static str,
     icon: &'static str,
+    variant: ButtonVariant,
     enabled: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    let colors = button_colors(ButtonVariant::Ghost, false, enabled);
+    let colors = button_colors(variant, false, enabled);
     let button_id = format!("preview-overlay-{id}");
 
     div()
@@ -351,6 +370,7 @@ fn preview_overlay_icon_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
+        .bg(color(colors.background))
         .text_color(color(colors.foreground))
         .opacity(colors.opacity)
         .when(!enabled, |this| this.cursor_not_allowed())
@@ -361,7 +381,11 @@ fn preview_overlay_icon_button(
                     .text_color(color(colors.hover_foreground))
                     .cursor_pointer()
             })
-            .active(move |style| style.bg(color(colors.active_background)))
+            .active(move |style| {
+                style
+                    .bg(color(colors.active_background))
+                    .text_color(color(colors.hover_foreground))
+            })
         })
         .child(icon_svg_with_hover(
             icon,
@@ -381,16 +405,9 @@ fn preview_overlay_opacity_slider(
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Stateful<gpui::Div> {
     let value = value.clamp(0.0, 1.0) as f32;
-    let handle_left = (value * OVERLAY_OPACITY_SLIDER_WIDTH) - (OVERLAY_OPACITY_HANDLE_SIZE / 2.0);
 
-    div()
-        .id("preview-overlay-opacity-slider")
-        .relative()
+    frame_slider("preview-overlay-opacity-slider", value, !enabled)
         .w(px(OVERLAY_OPACITY_SLIDER_WIDTH))
-        .h(px(PREVIEW_TOOLBAR_BUTTON_SIZE))
-        .flex()
-        .items_center()
-        .opacity(if enabled { 1.0 } else { 0.5 })
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|root, event: &MouseDownEvent, _window, cx| {
@@ -415,50 +432,10 @@ fn preview_overlay_opacity_slider(
                 }
             },
         ))
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .top(px(centered_offset(
-                    PREVIEW_TOOLBAR_BUTTON_SIZE,
-                    OVERLAY_OPACITY_TRACK_HEIGHT,
-                )))
-                .h(px(OVERLAY_OPACITY_TRACK_HEIGHT))
-                .rounded(px(OVERLAY_OPACITY_TRACK_HEIGHT / 2.0))
-                .bg(color(theme::FRAME_GRAY_100)),
-        )
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .top(px(centered_offset(
-                    PREVIEW_TOOLBAR_BUTTON_SIZE,
-                    OVERLAY_OPACITY_TRACK_HEIGHT,
-                )))
-                .w(px(value * OVERLAY_OPACITY_SLIDER_WIDTH))
-                .h(px(OVERLAY_OPACITY_TRACK_HEIGHT))
-                .rounded(px(OVERLAY_OPACITY_TRACK_HEIGHT / 2.0))
-                .bg(color(theme::FOREGROUND)),
-        )
-        .child(
-            div()
-                .absolute()
-                .left(px(handle_left.clamp(
-                    -(OVERLAY_OPACITY_HANDLE_SIZE / 2.0),
-                    OVERLAY_OPACITY_SLIDER_WIDTH - (OVERLAY_OPACITY_HANDLE_SIZE / 2.0),
-                )))
-                .top(px(centered_offset(
-                    PREVIEW_TOOLBAR_BUTTON_SIZE,
-                    OVERLAY_OPACITY_HANDLE_SIZE,
-                )))
-                .w(px(OVERLAY_OPACITY_HANDLE_SIZE))
-                .h(px(OVERLAY_OPACITY_HANDLE_SIZE))
-                .rounded_full()
-                .border_1()
-                .border_color(hsla(0.0, 0.0, 0.0, 0.35))
-                .bg(color(theme::FOREGROUND))
-                .shadow(card_surface_shadows()),
-        )
+        .child(frame_slider_handle(
+            "preview-overlay-opacity-handle",
+            value,
+            enabled,
+        ))
         .child(PreviewOverlayOpacityBoundsProbe { owner: cx.entity() })
 }

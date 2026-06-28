@@ -40,6 +40,7 @@ impl Render for FrameRoot {
             source_metadata.as_ref(),
             &selected_config_snapshot,
         );
+        self.sync_preview_canvas_auto_fit();
         let preview_crop =
             self.preview_crop_render_state(source_metadata.as_ref(), &selected_config_snapshot);
         let preview_overlay = self.preview_overlay_render_state();

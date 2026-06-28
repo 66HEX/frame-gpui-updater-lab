@@ -151,7 +151,7 @@ pub(in crate::app) fn preview_tool_button(
     } else {
         ButtonVariant::Ghost
     };
-    let colors = button_colors(variant, false, enabled);
+    let colors = button_colors(variant, selected, enabled);
     let button_id = format!("preview-tool-{}", icon.replace(['/', '.'], "-"));
 
     div()
@@ -163,11 +163,7 @@ pub(in crate::app) fn preview_tool_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(if selected {
-            color(colors.background)
-        } else {
-            color(theme::TRANSPARENT)
-        })
+        .bg(color(colors.background))
         .text_color(color(colors.foreground))
         .opacity(colors.opacity)
         .when(selected, |this| this.shadow(button_highlight_shadows()))
@@ -179,7 +175,11 @@ pub(in crate::app) fn preview_tool_button(
                     .text_color(color(colors.hover_foreground))
                     .cursor_pointer()
             })
-            .active(move |style| style.bg(color(colors.active_background)))
+            .active(move |style| {
+                style
+                    .bg(color(colors.active_background))
+                    .text_color(color(colors.hover_foreground))
+            })
         })
         .child(icon_svg_with_hover(
             icon,

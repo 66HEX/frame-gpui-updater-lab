@@ -81,6 +81,10 @@ impl FrameRoot {
         self.preview_ui.canvas_pan_drag = None;
     }
 
+    pub(super) fn sync_preview_canvas_auto_fit(&mut self) -> bool {
+        self.apply_preview_canvas_auto_fit()
+    }
+
     pub(super) fn preview_canvas_render_state(&self) -> PreviewCanvasRenderState {
         let (viewport_width, viewport_height) =
             self.preview_ui.canvas_bounds.map_or((0.0, 0.0), |bounds| {
@@ -126,8 +130,78 @@ impl FrameRoot {
         self.preview_ui.canvas.target_zoom = next_zoom;
         self.preview_ui.canvas.target_pan_x = target_pan_x;
         self.preview_ui.canvas.target_pan_y = target_pan_y;
+        self.preview_ui.canvas.auto_fit_pending = false;
         self.schedule_preview_frame_tick(cx);
         true
+    }
+
+    pub(super) fn zoom_preview_canvas_at_position(
+        &mut self,
+        position: Point<Pixels>,
+        multiplier: f64,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !multiplier.is_finite() || multiplier <= 0.0 {
+            return false;
+        }
+        let Some(bounds) = self.preview_ui.canvas_bounds else {
+            return false;
+        };
+        let viewport_width = f64::from(bounds.size.width.as_f32());
+        let viewport_height = f64::from(bounds.size.height.as_f32());
+        if viewport_width <= 0.0 || viewport_height <= 0.0 {
+            return false;
+        }
+        if position.x < bounds.origin.x
+            || position.x > bounds.origin.x + bounds.size.width
+            || position.y < bounds.origin.y
+            || position.y > bounds.origin.y + bounds.size.height
+        {
+            return false;
+        }
+
+        let current_zoom = self.preview_ui.canvas.target_zoom;
+        let next_zoom = clamp_preview_canvas_zoom(current_zoom * multiplier);
+        if (next_zoom - current_zoom).abs() <= f64::EPSILON {
+            return false;
+        }
+
+        let ratio = if current_zoom > f64::EPSILON {
+            next_zoom / current_zoom
+        } else {
+            1.0
+        };
+        let pointer_x = f64::from((position.x - bounds.origin.x).as_f32()) - (viewport_width / 2.0);
+        let pointer_y =
+            f64::from((position.y - bounds.origin.y).as_f32()) - (viewport_height / 2.0);
+        let target_pan_x = pointer_x - ((pointer_x - self.preview_ui.canvas.target_pan_x) * ratio);
+        let target_pan_y = pointer_y - ((pointer_y - self.preview_ui.canvas.target_pan_y) * ratio);
+        let (target_pan_x, target_pan_y) =
+            self.clamp_preview_canvas_pan_for_state(target_pan_x, target_pan_y, next_zoom);
+
+        self.preview_ui.canvas.auto_fit_pending = false;
+        self.preview_ui.canvas.target_zoom = next_zoom;
+        self.preview_ui.canvas.target_pan_x = target_pan_x;
+        self.preview_ui.canvas.target_pan_y = target_pan_y;
+        self.schedule_preview_frame_tick(cx);
+        true
+    }
+
+    pub(super) fn zoom_preview_canvas_from_wheel(
+        &mut self,
+        position: Point<Pixels>,
+        delta_y: f64,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !delta_y.is_finite() || delta_y.abs() <= f64::EPSILON {
+            return false;
+        }
+        let multiplier = if delta_y < 0.0 {
+            PREVIEW_CANVAS_WHEEL_ZOOM_STEP
+        } else {
+            1.0 / PREVIEW_CANVAS_WHEEL_ZOOM_STEP
+        };
+        self.zoom_preview_canvas_at_position(position, multiplier, cx)
     }
 
     pub(super) fn apply_preview_canvas_pan_drag(
@@ -166,6 +240,9 @@ impl FrameRoot {
         self.preview_ui.canvas.target_pan_x = next_pan_x;
         self.preview_ui.canvas.target_pan_y = next_pan_y;
         if changed {
+            self.preview_ui.canvas.auto_fit_pending = false;
+            self.preview_ui.canvas.current_pan_x = next_pan_x;
+            self.preview_ui.canvas.current_pan_y = next_pan_y;
             self.schedule_preview_frame_tick(cx);
         }
         changed
@@ -177,8 +254,10 @@ impl FrameRoot {
         had_drag
     }
 
-    pub(in crate::app) fn set_preview_canvas_bounds(&mut self, bounds: Bounds<Pixels>) {
+    pub(in crate::app) fn set_preview_canvas_bounds(&mut self, bounds: Bounds<Pixels>) -> bool {
+        let previous_bounds = self.preview_ui.canvas_bounds;
         self.preview_ui.canvas_bounds = Some(bounds);
+        previous_bounds != Some(bounds) && self.apply_preview_canvas_auto_fit()
     }
 
     fn clamp_preview_canvas_pan_for_state(&self, pan_x: f64, pan_y: f64, zoom: f64) -> (f64, f64) {
@@ -206,6 +285,35 @@ impl FrameRoot {
         let width = f64::from(size.width.0);
         let height = f64::from(size.height.0);
         (width > 0.0 && height > 0.0).then_some((width, height))
+    }
+
+    fn apply_preview_canvas_auto_fit(&mut self) -> bool {
+        if !self.preview_ui.canvas.auto_fit_pending {
+            return false;
+        }
+        let Some(bounds) = self.preview_ui.canvas_bounds else {
+            return false;
+        };
+        let Some((media_width, media_height)) = self.preview_canvas_media_dimensions() else {
+            return false;
+        };
+        let Some(zoom) = preview_canvas_initial_zoom(
+            f64::from(bounds.size.width.as_f32()),
+            f64::from(bounds.size.height.as_f32()),
+            media_width,
+            media_height,
+        ) else {
+            return false;
+        };
+
+        self.preview_ui.canvas.current_zoom = zoom;
+        self.preview_ui.canvas.target_zoom = zoom;
+        self.preview_ui.canvas.current_pan_x = 0.0;
+        self.preview_ui.canvas.current_pan_y = 0.0;
+        self.preview_ui.canvas.target_pan_x = 0.0;
+        self.preview_ui.canvas.target_pan_y = 0.0;
+        self.preview_ui.canvas.auto_fit_pending = false;
+        true
     }
 
     fn tick_preview_canvas_animation(&mut self) -> bool {
@@ -318,6 +426,7 @@ impl FrameRoot {
                 self.preview_ui.render_generation = latest.generation;
                 self.preview_ui.render_image = Some(image);
                 self.preview_ui.runtime_error = None;
+                self.apply_preview_canvas_auto_fit();
                 true
             }
             Err(error) => {
@@ -1293,6 +1402,30 @@ pub(in crate::app) fn preview_canvas_layout_metrics(
         left: (viewport_width / 2.0) + pan_x - (width / 2.0),
         top: (viewport_height / 2.0) + pan_y - (height / 2.0),
     })
+}
+
+pub(in crate::app) fn preview_canvas_initial_zoom(
+    viewport_width: f64,
+    viewport_height: f64,
+    media_width: f64,
+    media_height: f64,
+) -> Option<f64> {
+    if viewport_width <= 0.0 || viewport_height <= 0.0 || media_width <= 0.0 || media_height <= 0.0
+    {
+        return None;
+    }
+
+    let width_scale = viewport_width / media_width;
+    let height_scale = viewport_height / media_height;
+    let contain_scale = width_scale.min(height_scale);
+    let cover_scale = width_scale.max(height_scale);
+    if !contain_scale.is_finite() || contain_scale <= 0.0 || !cover_scale.is_finite() {
+        return None;
+    }
+
+    Some(clamp_preview_canvas_zoom(
+        (cover_scale / contain_scale) * PREVIEW_CANVAS_INITIAL_COVER_SCALE,
+    ))
 }
 
 pub(in crate::app) fn preview_canvas_pan_limits(

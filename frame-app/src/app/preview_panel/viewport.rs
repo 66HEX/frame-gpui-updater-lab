@@ -55,8 +55,10 @@ impl Element for PreviewCanvasBoundsProbe {
         _window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        self.owner.update(cx, |root, _cx| {
-            root.set_preview_canvas_bounds(bounds);
+        self.owner.update(cx, |root, cx| {
+            if root.set_preview_canvas_bounds(bounds) {
+                cx.notify();
+            }
         });
     }
 
@@ -151,6 +153,23 @@ pub(in crate::app) fn preview_viewport_content(
         };
 
         return content
+            .on_pinch(cx.listener(|root, event: &PinchEvent, _window, cx| {
+                let multiplier = 1.0 + f64::from(event.delta);
+                if root.zoom_preview_canvas_at_position(event.position, multiplier, cx) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
+            .on_scroll_wheel(cx.listener(|root, event: &ScrollWheelEvent, _window, cx| {
+                if root.zoom_preview_canvas_from_wheel(
+                    event.position,
+                    preview_scroll_delta_y(&event.delta),
+                    cx,
+                ) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
             .on_drag_move(cx.listener(
                 |root, event: &DragMoveEvent<PreviewCanvasPanDrag>, _window, cx| {
                     if root.apply_preview_canvas_pan_drag(event.event.position, event.bounds, cx) {
@@ -319,6 +338,13 @@ pub(in crate::app) fn preview_canvas_pan_enabled(state: &PreviewShellState) -> b
 fn preview_media_image(render_image: Arc<RenderImage>) -> gpui::Div {
     let image = img(render_image).size_full().object_fit(ObjectFit::Fill);
     div().absolute().inset_0().overflow_hidden().child(image)
+}
+
+fn preview_scroll_delta_y(delta: &ScrollDelta) -> f64 {
+    match delta {
+        ScrollDelta::Pixels(point) => f64::from(point.y.as_f32()),
+        ScrollDelta::Lines(point) => f64::from(point.y),
+    }
 }
 
 pub(in crate::app) fn preview_media_placeholder(media_kind: PreviewMediaKind) -> gpui::Div {

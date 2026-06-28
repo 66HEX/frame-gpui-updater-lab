@@ -221,13 +221,17 @@ pub(in crate::app) fn preview_crop_aspect_bar(
             )),
         )
         .child(
-            compact_text_button("Apply", false, state.crop.has_crop_dimensions).on_click(
-                cx.listener(|root, _: &ClickEvent, _window, cx| {
-                    if root.apply_selected_crop() {
-                        cx.notify();
-                    }
-                }),
-            ),
+            compact_text_button_variant(
+                "Apply",
+                ButtonVariant::Default,
+                false,
+                state.crop.has_crop_dimensions,
+            )
+            .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
+                if root.apply_selected_crop() {
+                    cx.notify();
+                }
+            })),
         );
 
     div()
@@ -250,6 +254,16 @@ pub(in crate::app) fn compact_text_button(
     } else {
         ButtonVariant::Ghost
     };
+
+    compact_text_button_variant(label, variant, selected, enabled)
+}
+
+pub(in crate::app) fn compact_text_button_variant(
+    label: &'static str,
+    variant: ButtonVariant,
+    selected: bool,
+    enabled: bool,
+) -> gpui::Stateful<gpui::Div> {
     let colors = button_colors(variant, selected, enabled);
 
     div()
@@ -263,11 +277,7 @@ pub(in crate::app) fn compact_text_button(
         .items_center()
         .justify_center()
         .rounded(px(theme::RADIUS_SM))
-        .bg(if selected {
-            color(colors.background)
-        } else {
-            color(theme::TRANSPARENT)
-        })
+        .bg(color(colors.background))
         .text_size(px(theme::TEXT_LABEL_SIZE))
         .text_color(color(colors.foreground))
         .opacity(colors.opacity)
@@ -278,6 +288,11 @@ pub(in crate::app) fn compact_text_button(
                     .bg(color(colors.hover_background))
                     .text_color(color(colors.hover_foreground))
                     .cursor_pointer()
+            })
+            .active(move |style| {
+                style
+                    .bg(color(colors.active_background))
+                    .text_color(color(colors.hover_foreground))
             })
         })
         .when(!enabled, |this| this.cursor_not_allowed())

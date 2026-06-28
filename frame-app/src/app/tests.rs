@@ -1,6 +1,7 @@
 use super::input::{should_capture_text_input_drag, should_handle_text_input};
 use super::preview_actions::{
-    lerp_preview_canvas_value, preview_canvas_layout_metrics, preview_canvas_pan_limits,
+    lerp_preview_canvas_value, preview_canvas_initial_zoom, preview_canvas_layout_metrics,
+    preview_canvas_pan_limits,
 };
 use super::preview_panel::{
     centered_offset, preview_shell_state, preview_timeline_labels, preview_trim_enabled,
@@ -1302,6 +1303,7 @@ mod frame_root_config {
         root.preview_ui.canvas.target_zoom = 3.0;
         root.preview_ui.canvas.current_pan_x = 0.5;
         root.preview_ui.canvas.target_pan_y = -0.5;
+        root.preview_ui.canvas.auto_fit_pending = false;
 
         root.sync_preview_canvas_for_selection(Some("first"));
 
@@ -2017,6 +2019,14 @@ mod preview_shell {
 
         assert_eq!(max_x, 1000.0);
         assert_eq!(max_y, 500.0);
+    }
+
+    #[test]
+    fn preview_canvas_initial_zoom_starts_just_below_object_cover() {
+        let zoom =
+            preview_canvas_initial_zoom(1000.0, 500.0, 1920.0, 1080.0).expect("initial zoom");
+
+        assert!((zoom - 1.08).abs() < 0.000_001);
     }
 
     #[test]

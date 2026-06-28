@@ -129,13 +129,13 @@ use gpui::{
     App, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, DragMoveEvent, Element, ElementId,
     ElementInputHandler, Entity, EntityInputHandler, ExternalPaths, FocusHandle, GlobalElementId,
     InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, PaintQuad, Pixels, PlatformInput,
-    Point, Position, PromptButton, PromptLevel, Render, RenderImage, Rgba, ScrollStrategy,
-    ScrollWheelEvent, ShapedLine, SharedString, StatefulInteractiveElement, Style, Task, TextRun,
-    TitlebarOptions, UTF16Selection, UniformListScrollHandle, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowControlArea, WindowDecorations, WindowOptions, actions, deferred, div,
-    fill, hsla, img, linear_color_stop, linear_gradient, point, prelude::*, px, relative, size,
-    svg, uniform_list,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, PaintQuad, PinchEvent, Pixels,
+    PlatformInput, Point, Position, PromptButton, PromptLevel, Render, RenderImage, Rgba,
+    ScrollDelta, ScrollStrategy, ScrollWheelEvent, ShapedLine, SharedString,
+    StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
+    UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
+    WindowDecorations, WindowOptions, actions, deferred, div, fill, hsla, img, linear_color_stop,
+    linear_gradient, point, prelude::*, px, relative, size, svg, uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
@@ -199,9 +199,12 @@ const TEXT_INPUT_CARET_WIDTH: f32 = 1.5;
 const TEXT_INPUT_CARET_HEIGHT: f32 = theme::TEXT_INPUT_CARET_HEIGHT;
 const TEXT_INPUT_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 const TEXT_INPUT_BLINK_PAUSE: Duration = Duration::from_millis(300);
+const PREVIEW_CANVAS_DEFAULT_ZOOM: f64 = 1.0;
+const PREVIEW_CANVAS_INITIAL_COVER_SCALE: f64 = 0.96;
 const PREVIEW_CANVAS_MIN_ZOOM: f64 = 0.25;
 const PREVIEW_CANVAS_MAX_ZOOM: f64 = 8.0;
 const PREVIEW_CANVAS_ZOOM_STEP: f64 = 1.18;
+const PREVIEW_CANVAS_WHEEL_ZOOM_STEP: f64 = 1.05;
 const PREVIEW_CANVAS_MAX_PAN: f64 = 2.0;
 const PREVIEW_CANVAS_LERP_FACTOR: f64 = 0.2;
 const PREVIEW_CANVAS_SNAP_EPSILON: f64 = 0.01;
@@ -347,17 +350,19 @@ struct PreviewCanvasState {
     current_pan_y: f64,
     target_pan_x: f64,
     target_pan_y: f64,
+    auto_fit_pending: bool,
 }
 
 impl Default for PreviewCanvasState {
     fn default() -> Self {
         Self {
-            current_zoom: PREVIEW_CANVAS_MIN_ZOOM,
-            target_zoom: PREVIEW_CANVAS_MIN_ZOOM,
+            current_zoom: PREVIEW_CANVAS_DEFAULT_ZOOM,
+            target_zoom: PREVIEW_CANVAS_DEFAULT_ZOOM,
             current_pan_x: 0.0,
             current_pan_y: 0.0,
             target_pan_x: 0.0,
             target_pan_y: 0.0,
+            auto_fit_pending: true,
         }
     }
 }
