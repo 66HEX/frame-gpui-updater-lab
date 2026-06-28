@@ -239,14 +239,40 @@ pub(super) fn titlebar_start_button(
 }
 
 pub(super) fn app_settings_sheet(
+    is_open: bool,
     current_max_concurrency: usize,
     draft_max_concurrency: &str,
     error: Option<&str>,
     value_focus: &FocusHandle,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> impl IntoElement {
     let draft_is_dirty = draft_max_concurrency.trim() != current_max_concurrency.to_string();
+    let transition = window
+        .use_keyed_transition(
+            "app-settings-sheet-motion",
+            cx,
+            SETTINGS_SHEET_MOTION_DURATION,
+            |_window, _cx| 0.0_f32,
+        )
+        .with_easing(ease_out_quint());
+    let target = motion_target(is_open);
+    if *transition.read_goal(cx) != target {
+        transition.update(cx, |progress, cx| {
+            *progress = target;
+            cx.notify();
+        });
+    }
+    let progress = *transition.evaluate(window, cx);
+    let right_inset = settings_sheet_right_inset(progress);
+
+    if !is_open && motion_is_hidden(progress) {
+        cx.defer_in(window, |root, _window, cx| {
+            if root.finish_app_settings_close() {
+                cx.notify();
+            }
+        });
+    }
 
     div()
         .id("app-settings-sheet")
@@ -257,8 +283,8 @@ pub(super) fn app_settings_sheet(
                 .id("app-settings-backdrop")
                 .absolute()
                 .inset_0()
-                .bg(color(theme::BACKGROUND.with_alpha(0.60)))
-                .backdrop_blur(px(4.0))
+                .bg(color(theme::BACKGROUND.with_alpha(0.60 * progress)))
+                .backdrop_blur(px(4.0 * progress))
                 .occlude()
                 .on_click(cx.listener(|root, _: &ClickEvent, _window, cx| {
                     cx.stop_propagation();
@@ -271,13 +297,14 @@ pub(super) fn app_settings_sheet(
                 .id("app-settings-panel")
                 .absolute()
                 .top_2()
-                .right_2()
+                .right(px(right_inset))
                 .bottom_2()
                 .w(px(320.0))
                 .flex()
                 .flex_col()
                 .rounded(px(theme::RADIUS_LG))
                 .bg(color(theme::SIDEBAR))
+                .opacity(progress)
                 .shadow(card_surface_shadows())
                 .occlude()
                 .on_click(cx.listener(|_, _: &ClickEvent, _window, cx| {

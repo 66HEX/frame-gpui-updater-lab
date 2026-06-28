@@ -99,6 +99,7 @@ pub(in crate::app) struct SettingsSubtitlesTabState<'a> {
     pub(in crate::app) subtitle_fonts: &'a [String],
     pub(in crate::app) color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     pub(in crate::app) active_popover: Option<SettingsSubtitlePopover>,
+    pub(in crate::app) rendered_popover: Option<SettingsSubtitlePopover>,
     pub(in crate::app) font_select_scroll_handle: &'a ScrollHandle,
     pub(in crate::app) font_size_select_scroll_handle: &'a ScrollHandle,
     pub(in crate::app) font_color_draft: &'a str,
@@ -113,6 +114,7 @@ struct SettingsSubtitleStyleState<'a> {
     subtitle_fonts: &'a [String],
     color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     active_popover: Option<SettingsSubtitlePopover>,
+    rendered_popover: Option<SettingsSubtitlePopover>,
     font_select_scroll_handle: &'a ScrollHandle,
     font_size_select_scroll_handle: &'a ScrollHandle,
     font_color_draft: &'a str,
@@ -128,14 +130,15 @@ struct SettingsSubtitleColorFieldSpec<'a> {
     disabled: bool,
     target: SettingsSubtitleColorTarget,
     focus: Option<&'a FocusHandle>,
-    is_open: bool,
+    active_popover: Option<SettingsSubtitlePopover>,
+    rendered_popover: Option<SettingsSubtitlePopover>,
     draft: &'a str,
     hsv: SettingsSubtitleHsv,
 }
 
 pub(in crate::app) fn settings_subtitles_tab(
     state: SettingsSubtitlesTabState<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let config = state.config;
@@ -162,6 +165,7 @@ pub(in crate::app) fn settings_subtitles_tab(
                     subtitle_fonts: state.subtitle_fonts,
                     color_focuses: state.color_focuses,
                     active_popover: state.active_popover,
+                    rendered_popover: state.rendered_popover,
                     font_select_scroll_handle: state.font_select_scroll_handle,
                     font_size_select_scroll_handle: state.font_size_select_scroll_handle,
                     font_color_draft: state.font_color_draft,
@@ -288,7 +292,7 @@ fn settings_subtitle_clear_button(
 
 fn settings_subtitle_style_controls(
     state: SettingsSubtitleStyleState<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
@@ -304,15 +308,21 @@ fn settings_subtitle_style_controls(
                     state.config,
                     state.disabled,
                     state.subtitle_fonts,
-                    state.active_popover == Some(SettingsSubtitlePopover::FontName),
+                    state.active_popover,
+                    state.rendered_popover,
+                    SettingsSubtitlePopover::FontName,
                     state.font_select_scroll_handle,
+                    window,
                     cx,
                 ))
                 .child(settings_subtitle_font_size_select(
                     state.config,
                     state.disabled,
-                    state.active_popover == Some(SettingsSubtitlePopover::FontSize),
+                    state.active_popover,
+                    state.rendered_popover,
+                    SettingsSubtitlePopover::FontSize,
                     state.font_size_select_scroll_handle,
+                    window,
                     cx,
                 )),
         )
@@ -332,7 +342,8 @@ fn settings_subtitle_style_controls(
                         disabled: state.disabled,
                         target: SettingsSubtitleColorTarget::Font,
                         focus: state.color_focuses.font,
-                        is_open: state.active_popover == Some(SettingsSubtitlePopover::FontColor),
+                        active_popover: state.active_popover,
+                        rendered_popover: state.rendered_popover,
                         draft: state.font_color_draft,
                         hsv: state.font_color_hsv_draft,
                     },
@@ -350,8 +361,8 @@ fn settings_subtitle_style_controls(
                         disabled: state.disabled,
                         target: SettingsSubtitleColorTarget::Outline,
                         focus: state.color_focuses.outline,
-                        is_open: state.active_popover
-                            == Some(SettingsSubtitlePopover::OutlineColor),
+                        active_popover: state.active_popover,
+                        rendered_popover: state.rendered_popover,
                         draft: state.outline_color_draft,
                         hsv: state.outline_color_hsv_draft,
                     },
@@ -380,8 +391,11 @@ fn settings_subtitle_font_select(
     config: &ConversionConfig,
     disabled: bool,
     subtitle_fonts: &[String],
-    is_open: bool,
+    active_popover: Option<SettingsSubtitlePopover>,
+    rendered_popover: Option<SettingsSubtitlePopover>,
+    popover: SettingsSubtitlePopover,
     scroll_handle: &ScrollHandle,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let display = config
@@ -403,11 +417,13 @@ fn settings_subtitle_font_select(
             "settings-subtitle-font-select",
             display,
             enabled,
-            SettingsSubtitlePopover::FontName,
+            popover,
             cx,
         ));
 
-    if is_open && has_options {
+    if rendered_popover == Some(popover) && has_options {
+        let progress =
+            subtitle_popover_progress(popover, active_popover == Some(popover), window, cx);
         let content_height = subtitle_select_content_height(options.len());
         let mut list = div()
             .id("settings-subtitle-font-options-list")
@@ -426,13 +442,16 @@ fn settings_subtitle_font_select(
         let mut popover = div()
             .absolute()
             .id("settings-subtitle-font-options")
-            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
+            .top(px(
+                SUBTITLE_POPOVER_TOP_OFFSET + subtitle_popover_slide_offset(progress)
+            ))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
             .overflow_hidden()
             .rounded(px(theme::RADIUS_SM))
             .bg(color(theme::DROPDOWN))
+            .opacity(progress)
             .shadow(button_highlight_shadows())
             .occlude()
             .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
@@ -457,8 +476,11 @@ fn settings_subtitle_font_select(
 fn settings_subtitle_font_size_select(
     config: &ConversionConfig,
     disabled: bool,
-    is_open: bool,
+    active_popover: Option<SettingsSubtitlePopover>,
+    rendered_popover: Option<SettingsSubtitlePopover>,
+    popover: SettingsSubtitlePopover,
     scroll_handle: &ScrollHandle,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let display = config
@@ -479,11 +501,13 @@ fn settings_subtitle_font_size_select(
             "settings-subtitle-font-size-select",
             display,
             enabled,
-            SettingsSubtitlePopover::FontSize,
+            popover,
             cx,
         ));
 
-    if is_open {
+    if rendered_popover == Some(popover) {
+        let progress =
+            subtitle_popover_progress(popover, active_popover == Some(popover), window, cx);
         let content_height = subtitle_select_content_height(options.len());
         let mut list = div()
             .id("settings-subtitle-font-size-options-list")
@@ -502,13 +526,16 @@ fn settings_subtitle_font_size_select(
         let mut popover = div()
             .absolute()
             .id("settings-subtitle-font-size-options")
-            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
+            .top(px(
+                SUBTITLE_POPOVER_TOP_OFFSET + subtitle_popover_slide_offset(progress)
+            ))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
             .overflow_hidden()
             .rounded(px(theme::RADIUS_SM))
             .bg(color(theme::DROPDOWN))
+            .opacity(progress)
             .shadow(button_highlight_shadows())
             .occlude()
             .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
@@ -663,6 +690,49 @@ fn subtitle_select_content_height(option_count: usize) -> f32 {
     option_count as f32 * SUBTITLE_SELECT_OPTION_HEIGHT + SUBTITLE_SELECT_CONTENT_PADDING * 2.0
 }
 
+fn subtitle_popover_progress(
+    popover: SettingsSubtitlePopover,
+    is_open: bool,
+    window: &mut Window,
+    cx: &mut Context<FrameRoot>,
+) -> f32 {
+    let transition = window
+        .use_keyed_transition(
+            subtitle_popover_motion_key(popover),
+            cx,
+            SUBTITLE_POPOVER_MOTION_DURATION,
+            |_window, _cx| 0.0_f32,
+        )
+        .with_easing(ease_out_quint());
+    let target = motion_target(is_open);
+    if *transition.read_goal(cx) != target {
+        transition.update(cx, |progress, cx| {
+            *progress = target;
+            cx.notify();
+        });
+    }
+    let progress = *transition.evaluate(window, cx);
+
+    if !is_open && motion_is_hidden(progress) {
+        cx.defer_in(window, move |root, _window, cx| {
+            if root.finish_subtitle_popover_close(popover) {
+                cx.notify();
+            }
+        });
+    }
+
+    progress
+}
+
+fn subtitle_popover_motion_key(popover: SettingsSubtitlePopover) -> &'static str {
+    match popover {
+        SettingsSubtitlePopover::FontName => "settings-subtitle-font-popover-motion",
+        SettingsSubtitlePopover::FontSize => "settings-subtitle-size-popover-motion",
+        SettingsSubtitlePopover::FontColor => "settings-subtitle-font-color-popover-motion",
+        SettingsSubtitlePopover::OutlineColor => "settings-subtitle-outline-color-popover-motion",
+    }
+}
+
 fn settings_subtitle_select_option(
     id: impl Into<String>,
     label: impl Into<String>,
@@ -710,7 +780,7 @@ fn settings_subtitle_select_option(
 
 fn settings_subtitle_color_field(
     spec: SettingsSubtitleColorFieldSpec<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let SettingsSubtitleColorFieldSpec {
@@ -720,7 +790,8 @@ fn settings_subtitle_color_field(
         disabled,
         target,
         focus,
-        is_open,
+        active_popover,
+        rendered_popover,
         draft,
         hsv,
     } = spec;
@@ -812,10 +883,12 @@ fn settings_subtitle_color_field(
                 ))),
         );
 
-    if is_open {
+    if rendered_popover == Some(popover) {
+        let progress =
+            subtitle_popover_progress(popover, active_popover == Some(popover), window, cx);
         field = field.child(
             deferred(settings_subtitle_color_picker(
-                target, hsv, draft, focus, window, cx,
+                target, hsv, draft, focus, progress, window, cx,
             ))
             .with_priority(10),
         );
@@ -829,6 +902,7 @@ fn settings_subtitle_color_picker(
     hsv: SettingsSubtitleHsv,
     draft: &str,
     focus: Option<&FocusHandle>,
+    progress: f32,
     window: &Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
@@ -840,7 +914,9 @@ fn settings_subtitle_color_picker(
 
     div()
         .absolute()
-        .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
+        .top(px(
+            SUBTITLE_POPOVER_TOP_OFFSET + subtitle_popover_slide_offset(progress)
+        ))
         .when(align_right, |this| this.right_0())
         .when(!align_right, |this| this.left_0())
         .w(px(SUBTITLE_COLOR_PANEL_WIDTH))
@@ -849,6 +925,7 @@ fn settings_subtitle_color_picker(
         .gap_2()
         .rounded(px(theme::RADIUS_SM))
         .bg(color(theme::DROPDOWN))
+        .opacity(progress)
         .p_2()
         .shadow(button_highlight_shadows())
         .occlude()
@@ -1094,11 +1171,12 @@ fn settings_subtitle_hue_segments() -> gpui::Div {
 
 impl FrameRoot {
     pub(in crate::app) fn toggle_subtitle_popover(&mut self, popover: SettingsSubtitlePopover) {
-        self.subtitle_ui.popover = if self.subtitle_ui.popover == Some(popover) {
-            None
+        if self.subtitle_ui.popover == Some(popover) {
+            self.subtitle_ui.popover = None;
         } else {
-            Some(popover)
-        };
+            self.subtitle_ui.popover = Some(popover);
+            self.subtitle_ui.rendered_popover = Some(popover);
+        }
     }
 
     pub(in crate::app) fn close_subtitle_popover(&mut self) {
@@ -1114,6 +1192,18 @@ impl FrameRoot {
         }
     }
 
+    pub(in crate::app) fn finish_subtitle_popover_close(
+        &mut self,
+        popover: SettingsSubtitlePopover,
+    ) -> bool {
+        if self.subtitle_ui.popover.is_some() || self.subtitle_ui.rendered_popover != Some(popover)
+        {
+            return false;
+        }
+        self.subtitle_ui.rendered_popover = None;
+        true
+    }
+
     pub(in crate::app) fn open_subtitle_color_popover(
         &mut self,
         popover: SettingsSubtitlePopover,
@@ -1121,6 +1211,7 @@ impl FrameRoot {
         value: &str,
     ) {
         self.subtitle_ui.popover = Some(popover);
+        self.subtitle_ui.rendered_popover = Some(popover);
         self.set_subtitle_color_hsv_draft(target, hex_to_subtitle_hsv(value));
         self.set_subtitle_color_draft(target, value.to_uppercase());
     }

@@ -8,6 +8,7 @@ mod input;
 mod logs_panel;
 mod logs_state;
 mod metadata;
+mod motion;
 mod preview_actions;
 mod preview_panel;
 mod primitives;
@@ -24,6 +25,7 @@ pub use runtime::{frame_window_options, init_app, open_frame_window};
 use chrome::{app_settings_sheet, drag_drop_overlay, titlebar};
 use input::{FrameTextInputKind, FrameTextInputUiState};
 use logs_panel::logs_view;
+use motion::*;
 use preview_panel::{
     FlipAxis, PreviewCanvasRenderState, PreviewCropRenderState, PreviewMediaRenderState,
     PreviewOverlayRenderState, PreviewPanelProps, PreviewTimecodeInputFocuses, crop_aspect_id,
@@ -135,8 +137,9 @@ use gpui::{
     ScrollDelta, ScrollHandle, ScrollStrategy, ScrollWheelEvent, ShapedLine, SharedString,
     StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
     UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowOptions, actions, canvas, deferred, div, fill, hsla, img,
-    linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg, uniform_list,
+    WindowDecorations, WindowOptions, actions, canvas, deferred, div, ease_out_quint, fill, hsla,
+    img, linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg,
+    uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
@@ -239,6 +242,7 @@ pub struct FrameRoot {
 
 struct SettingsUiState {
     is_open: bool,
+    is_present: bool,
     active_tab: SettingsTab,
     max_concurrency_draft: String,
     max_concurrency_error: Option<String>,
@@ -251,6 +255,7 @@ impl Default for SettingsUiState {
     fn default() -> Self {
         Self {
             is_open: false,
+            is_present: false,
             active_tab: SettingsTab::Source,
             max_concurrency_draft: DEFAULT_MAX_CONCURRENCY.to_string(),
             max_concurrency_error: None,
@@ -263,6 +268,7 @@ impl Default for SettingsUiState {
 
 struct SubtitleUiState {
     popover: Option<SettingsSubtitlePopover>,
+    rendered_popover: Option<SettingsSubtitlePopover>,
     font_select_scroll_handle: ScrollHandle,
     font_size_select_scroll_handle: ScrollHandle,
     font_color_draft: String,
@@ -276,6 +282,7 @@ impl Default for SubtitleUiState {
     fn default() -> Self {
         Self {
             popover: None,
+            rendered_popover: None,
             font_select_scroll_handle: ScrollHandle::new(),
             font_size_select_scroll_handle: ScrollHandle::new(),
             font_color_draft: DEFAULT_SUBTITLE_FONT_COLOR.to_uppercase(),
@@ -491,6 +498,7 @@ struct SettingsRenderState<'a> {
     metadata_focuses: SettingsMetadataInputFocuses<'a>,
     subtitle_color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     subtitle_popover: Option<SettingsSubtitlePopover>,
+    subtitle_rendered_popover: Option<SettingsSubtitlePopover>,
     subtitle_font_select_scroll_handle: &'a ScrollHandle,
     subtitle_font_size_select_scroll_handle: &'a ScrollHandle,
     subtitle_font_color_draft: &'a str,

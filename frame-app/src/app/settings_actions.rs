@@ -3,9 +3,11 @@ use super::*;
 impl FrameRoot {
     pub(super) fn open_app_settings(&mut self) {
         self.settings_ui.is_open = true;
+        self.settings_ui.is_present = true;
         self.settings_ui.max_concurrency_draft = self.max_concurrency.to_string();
         self.settings_ui.max_concurrency_error = None;
     }
+
     pub(super) fn close_app_settings(&mut self) {
         self.settings_ui.is_open = false;
         self.settings_ui.max_concurrency_error = None;
@@ -16,6 +18,15 @@ impl FrameRoot {
             self.stop_text_input_cursor();
         }
     }
+
+    pub(super) fn finish_app_settings_close(&mut self) -> bool {
+        if self.settings_ui.is_open || !self.settings_ui.is_present {
+            return false;
+        }
+        self.settings_ui.is_present = false;
+        true
+    }
+
     pub(super) fn apply_max_concurrency_draft(&mut self) -> bool {
         let Some(value) = self.parsed_max_concurrency_draft() else {
             self.settings_ui.max_concurrency_error =

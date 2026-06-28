@@ -2,7 +2,7 @@ use super::*;
 
 pub(in crate::app) fn settings_panel(
     settings: SettingsRenderState<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let active_tab =
@@ -101,7 +101,7 @@ pub(in crate::app) fn settings_tab_button(
 pub(in crate::app) fn settings_tab_content(
     tab: SettingsTab,
     settings: SettingsRenderState<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let content = div()
@@ -164,6 +164,7 @@ pub(in crate::app) fn settings_tab_content(
                 subtitle_fonts: settings.subtitle_fonts,
                 color_focuses: settings.subtitle_color_focuses,
                 active_popover: settings.subtitle_popover,
+                rendered_popover: settings.subtitle_rendered_popover,
                 font_select_scroll_handle: &settings.subtitle_font_select_scroll_handle,
                 font_size_select_scroll_handle: &settings.subtitle_font_size_select_scroll_handle,
                 font_color_draft: settings.subtitle_font_color_draft,

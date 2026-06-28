@@ -113,6 +113,7 @@ impl Render for FrameRoot {
                             outline: Some(&subtitle_outline_color_focus),
                         },
                         subtitle_popover: self.subtitle_ui.popover,
+                        subtitle_rendered_popover: self.subtitle_ui.rendered_popover,
                         subtitle_font_select_scroll_handle: &self
                             .subtitle_ui
                             .font_select_scroll_handle,
@@ -184,9 +185,10 @@ impl Render for FrameRoot {
             .child(titlebar(state, cx))
             .child(content);
 
-        if self.settings_ui.is_open {
+        if self.settings_ui.is_present {
             let value_focus = self.ensure_text_input_focus(FrameTextInputKind::MaxConcurrency, cx);
             root = root.child(app_settings_sheet(
+                self.settings_ui.is_open,
                 self.max_concurrency,
                 &self.settings_ui.max_concurrency_draft,
                 self.settings_ui.max_concurrency_error.as_deref(),

@@ -333,6 +333,26 @@ mod frame_root_conversion {
     }
 
     #[test]
+    fn app_settings_close_keeps_sheet_present_until_motion_finishes() {
+        let mut root = FrameRoot::new();
+
+        root.open_app_settings();
+        root.close_app_settings();
+
+        assert!(!root.settings_ui.is_open);
+        assert!(root.settings_ui.is_present);
+
+        assert!(root.finish_app_settings_close());
+        assert!(!root.settings_ui.is_present);
+    }
+
+    #[test]
+    fn app_settings_sheet_motion_keeps_final_edge_inset() {
+        assert_eq!(settings_sheet_right_inset(1.0), 8.0);
+        assert_eq!(settings_sheet_right_inset(0.0), -16.0);
+    }
+
+    #[test]
     fn apply_max_concurrency_draft_persists_updated_limit() {
         let persistence = AppPersistence::from_settings_path(test_settings_path());
         let mut root = FrameRoot::new_with_persistence(persistence.clone());
@@ -742,15 +762,29 @@ mod frame_root_conversion {
             root.subtitle_ui.popover,
             Some(SettingsSubtitlePopover::FontName)
         );
+        assert_eq!(
+            root.subtitle_ui.rendered_popover,
+            Some(SettingsSubtitlePopover::FontName)
+        );
 
         root.toggle_subtitle_popover(SettingsSubtitlePopover::FontSize);
         assert_eq!(
             root.subtitle_ui.popover,
             Some(SettingsSubtitlePopover::FontSize)
         );
+        assert_eq!(
+            root.subtitle_ui.rendered_popover,
+            Some(SettingsSubtitlePopover::FontSize)
+        );
 
         root.toggle_subtitle_popover(SettingsSubtitlePopover::FontSize);
         assert_eq!(root.subtitle_ui.popover, None);
+        assert_eq!(
+            root.subtitle_ui.rendered_popover,
+            Some(SettingsSubtitlePopover::FontSize)
+        );
+        assert!(root.finish_subtitle_popover_close(SettingsSubtitlePopover::FontSize));
+        assert_eq!(root.subtitle_ui.rendered_popover, None);
     }
 
     #[test]
@@ -1887,6 +1921,7 @@ mod preview_shell {
                 outline: None,
             },
             subtitle_popover: None,
+            subtitle_rendered_popover: None,
             subtitle_font_select_scroll_handle,
             subtitle_font_size_select_scroll_handle,
             subtitle_font_color_draft: "",

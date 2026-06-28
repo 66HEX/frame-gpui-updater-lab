@@ -7,7 +7,7 @@ pub(super) fn workspace_view(
     file_queue: &FileQueue,
     settings: SettingsRenderState<'_>,
     preview_props: PreviewPanelProps<'_>,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     div()
