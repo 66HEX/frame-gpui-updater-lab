@@ -880,23 +880,39 @@ impl FrameRoot {
         let Some(config) = self.selected_config() else {
             return false;
         };
-        let Some(dimensions) = preview_crop_source_dimensions(metadata.as_ref(), &config.rotation)
-        else {
+        let rotation = config.rotation.clone();
+        let flip_horizontal = config.flip_horizontal;
+        let flip_vertical = config.flip_vertical;
+        let Some(dimensions) = crop_base_dimensions(metadata.as_ref(), &rotation) else {
             return false;
         };
-        let is_side_rotation = is_side_rotation(&config.rotation);
+        let preview_rotation = PreviewRotation::from(rotation.as_str());
 
         let previous_aspect = self.preview_ui.crop_aspect.clone();
         let previous_rect = self.preview_ui.draft_crop;
         self.preview_ui.crop_aspect = aspect_id.to_string();
         if let Some(rect) = self.preview_ui.draft_crop {
             self.preview_ui.draft_crop = Some(if let Some(ratio) = aspect_value(aspect_id) {
-                clamp_rect(adjust_rect_to_ratio(
+                let visual_rect = clamp_rect(transform_crop_rect(
                     rect,
+                    preview_rotation,
+                    flip_horizontal,
+                    flip_vertical,
+                    false,
+                ));
+                let adjusted_visual_rect = clamp_rect(adjust_rect_to_ratio(
+                    visual_rect,
                     ratio,
                     f64::from(dimensions.width),
                     f64::from(dimensions.height),
-                    is_side_rotation,
+                    false,
+                ));
+                clamp_rect(transform_crop_rect(
+                    adjusted_visual_rect,
+                    preview_rotation,
+                    flip_horizontal,
+                    flip_vertical,
+                    true,
                 ))
             } else {
                 clamp_rect(rect)
@@ -1069,11 +1085,13 @@ impl FrameRoot {
         let Some(config) = self.selected_config() else {
             return false;
         };
-        let Some(dimensions) = preview_crop_source_dimensions(metadata.as_ref(), &config.rotation)
-        else {
+        let rotation = config.rotation.clone();
+        let flip_horizontal = config.flip_horizontal;
+        let flip_vertical = config.flip_vertical;
+        let Some(dimensions) = crop_base_dimensions(metadata.as_ref(), &rotation) else {
             return false;
         };
-        let is_side_rotation = is_side_rotation(&config.rotation);
+        let preview_rotation = PreviewRotation::from(rotation.as_str());
 
         let drag_state = match self.preview_ui.crop_drag {
             Some(state) if state.handle == handle => state,
@@ -1088,16 +1106,35 @@ impl FrameRoot {
             }
         };
 
-        let next_rect = crate::preview::apply_visual_crop_drag(crate::preview::VisualCropDrag {
-            start_rect: drag_state.start_rect,
-            handle,
-            start_point: drag_state.start_point,
-            current_point: point,
-            aspect_id: &self.preview_ui.crop_aspect,
-            source_width: f64::from(dimensions.width),
-            source_height: f64::from(dimensions.height),
-            is_side_rotation,
-        });
+        let visual_start_rect = clamp_rect(transform_crop_rect(
+            drag_state.start_rect,
+            preview_rotation,
+            flip_horizontal,
+            flip_vertical,
+            false,
+        ));
+        let visual_next_rect =
+            crate::preview::apply_visual_crop_drag(crate::preview::VisualCropDrag {
+                start_rect: visual_start_rect,
+                handle,
+                start_point: drag_state.start_point,
+                current_point: point,
+                aspect_id: &self.preview_ui.crop_aspect,
+                source_width: f64::from(dimensions.width),
+                source_height: f64::from(dimensions.height),
+                is_side_rotation: false,
+            });
+        let next_rect = if visual_next_rect == visual_start_rect {
+            drag_state.start_rect
+        } else {
+            clamp_rect(transform_crop_rect(
+                visual_next_rect,
+                preview_rotation,
+                flip_horizontal,
+                flip_vertical,
+                true,
+            ))
+        };
         let changed = self.preview_ui.draft_crop != Some(next_rect);
         self.preview_ui.draft_crop = Some(next_rect);
         changed

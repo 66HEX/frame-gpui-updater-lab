@@ -12,7 +12,7 @@ pub(super) struct PreviewCropDrag {
 }
 
 pub(in crate::app) fn preview_crop_overlay(state: &PreviewShellState) -> gpui::Div {
-    let rect = state.crop.draft_crop.unwrap_or_else(default_crop_rect);
+    let rect = preview_crop_visual_rect(&state.crop);
     let x = rect.x as f32;
     let y = rect.y as f32;
     let width = rect.width as f32;
@@ -36,39 +36,33 @@ pub(in crate::app) fn preview_crop_overlay(state: &PreviewShellState) -> gpui::D
             y + (height * 2.0) / 3.0,
             width,
         ))
-        .child(preview_crop_handle(DragHandle::NorthWest, x, y, state))
-        .child(preview_crop_handle(
-            DragHandle::North,
-            x + width / 2.0,
-            y,
-            state,
-        ))
-        .child(preview_crop_handle(DragHandle::NorthEast, right, y, state))
+        .child(preview_crop_handle(DragHandle::NorthWest, x, y))
+        .child(preview_crop_handle(DragHandle::North, x + width / 2.0, y))
+        .child(preview_crop_handle(DragHandle::NorthEast, right, y))
         .child(preview_crop_handle(
             DragHandle::East,
             right,
             y + height / 2.0,
-            state,
         ))
-        .child(preview_crop_handle(
-            DragHandle::SouthEast,
-            right,
-            bottom,
-            state,
-        ))
+        .child(preview_crop_handle(DragHandle::SouthEast, right, bottom))
         .child(preview_crop_handle(
             DragHandle::South,
             x + width / 2.0,
             bottom,
-            state,
         ))
-        .child(preview_crop_handle(DragHandle::SouthWest, x, bottom, state))
-        .child(preview_crop_handle(
-            DragHandle::West,
-            x,
-            y + height / 2.0,
-            state,
-        ))
+        .child(preview_crop_handle(DragHandle::SouthWest, x, bottom))
+        .child(preview_crop_handle(DragHandle::West, x, y + height / 2.0))
+}
+
+pub(in crate::app) fn preview_crop_visual_rect(state: &PreviewCropRenderState) -> CropRect {
+    let rect = state.draft_crop.unwrap_or_else(default_crop_rect);
+    clamp_rect(transform_crop_rect(
+        rect,
+        PreviewRotation::from(state.rotation.as_str()),
+        state.flip_horizontal,
+        state.flip_vertical,
+        false,
+    ))
 }
 
 pub(in crate::app) fn crop_mask_rect(left: f32, top: f32, width: f32, height: f32) -> gpui::Div {
@@ -129,7 +123,6 @@ pub(in crate::app) fn preview_crop_handle(
     handle: DragHandle,
     x: f32,
     y: f32,
-    state: &PreviewShellState,
 ) -> gpui::Stateful<gpui::Div> {
     crop_handle_cursor(
         div()
@@ -147,7 +140,6 @@ pub(in crate::app) fn preview_crop_handle(
             .bg(color(theme::FOREGROUND))
             .shadow(card_surface_shadows()),
         handle,
-        is_side_rotation(&state.crop.rotation),
     )
     .on_drag(
         PreviewCropDrag { handle },
@@ -158,15 +150,18 @@ pub(in crate::app) fn preview_crop_handle(
 pub(in crate::app) fn crop_handle_cursor(
     handle: gpui::Stateful<gpui::Div>,
     drag_handle: DragHandle,
-    is_side_rotation: bool,
 ) -> gpui::Stateful<gpui::Div> {
-    match crate::preview::handle_cursor(drag_handle, is_side_rotation) {
+    match crop_handle_screen_cursor(drag_handle) {
         "ns-resize" => handle.cursor_ns_resize(),
         "ew-resize" => handle.cursor_ew_resize(),
         "nesw-resize" => handle.cursor_nesw_resize(),
         "nwse-resize" => handle.cursor_nwse_resize(),
         _ => handle.cursor_grab(),
     }
+}
+
+pub(in crate::app) fn crop_handle_screen_cursor(drag_handle: DragHandle) -> &'static str {
+    crate::preview::handle_cursor(drag_handle, false)
 }
 
 pub(in crate::app) fn crop_handle_id(handle: DragHandle) -> &'static str {

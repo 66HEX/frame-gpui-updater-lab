@@ -4,8 +4,8 @@ use super::preview_actions::{
     preview_canvas_pan_limits, preview_canvas_transform_settled,
 };
 use super::preview_panel::{
-    centered_offset, preview_shell_state, preview_timeline_labels, preview_trim_enabled,
-    preview_visual_controls_visible, timeline_fraction_from_percent,
+    centered_offset, preview_crop_visual_rect, preview_shell_state, preview_timeline_labels,
+    preview_trim_enabled, preview_visual_controls_visible, timeline_fraction_from_percent,
     timeline_slider_percent_from_bounds,
 };
 use super::primitives::{ButtonVariant, button_colors};
@@ -1198,6 +1198,42 @@ mod frame_root_config {
     }
 
     #[test]
+    fn select_preview_crop_aspect_keeps_side_rotation_preview_square() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("video", "/tmp/one.mp4", 1));
+        root.source_metadata.mark_ready(
+            "video".to_string(),
+            SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                width: Some(1920),
+                height: Some(1080),
+                ..SourceMetadata::default()
+            },
+        );
+
+        assert!(root.rotate_selected_preview());
+        assert!(root.toggle_selected_crop_mode());
+        assert!(root.select_preview_crop_aspect("1:1"));
+
+        let config = &root.file_queue.file_by_id("video").unwrap().config;
+        let metadata_entry = root.source_metadata.entry_for("video");
+        let crop_state = root.preview_crop_render_state(metadata_entry.metadata.as_ref(), config);
+        let visual_rect = preview_crop_visual_rect(&crop_state);
+        let visual_width = visual_rect.width * 1080.0;
+        let visual_height = visual_rect.height * 1920.0;
+
+        assert!((visual_width - visual_height).abs() < 0.000_001);
+        assert!(root.apply_selected_crop());
+        let crop = root
+            .file_queue
+            .file_by_id("video")
+            .and_then(|file| file.config.crop.as_ref())
+            .expect("crop settings");
+        assert_eq!(crop.width, crop.height);
+    }
+
+    #[test]
     fn apply_selected_crop_writes_selected_file_crop_pixels() {
         let mut root = FrameRoot::new();
         root.file_queue
@@ -1407,6 +1443,42 @@ mod frame_root_config {
                 .and_then(|file| file.config.crop.as_ref()),
             None
         );
+    }
+
+    #[test]
+    fn apply_preview_crop_drag_moves_visual_rect_after_side_rotation() {
+        let mut root = FrameRoot::new();
+        root.file_queue
+            .add_file(FileItem::from_path("video", "/tmp/one.mp4", 1));
+        root.source_metadata.mark_ready(
+            "video".to_string(),
+            SourceMetadata {
+                media_kind: Some(SourceKind::Video),
+                width: Some(1920),
+                height: Some(1080),
+                ..SourceMetadata::default()
+            },
+        );
+
+        assert!(root.rotate_selected_preview());
+        assert!(root.toggle_selected_crop_mode());
+        assert!(root.select_preview_crop_aspect("1:1"));
+
+        let config = &root.file_queue.file_by_id("video").unwrap().config;
+        let metadata_entry = root.source_metadata.entry_for("video");
+        let crop_state = root.preview_crop_render_state(metadata_entry.metadata.as_ref(), config);
+        let before = preview_crop_visual_rect(&crop_state);
+
+        assert!(!root.apply_preview_crop_drag(DragHandle::Move, PreviewPoint { x: 0.50, y: 0.50 }));
+        assert!(root.apply_preview_crop_drag(DragHandle::Move, PreviewPoint { x: 0.60, y: 0.50 }));
+
+        let config = &root.file_queue.file_by_id("video").unwrap().config;
+        let metadata_entry = root.source_metadata.entry_for("video");
+        let crop_state = root.preview_crop_render_state(metadata_entry.metadata.as_ref(), config);
+        let after = preview_crop_visual_rect(&crop_state);
+
+        assert!((after.x - before.x - 0.10).abs() < 0.000_001);
+        assert!((after.y - before.y).abs() < 0.000_001);
     }
 
     #[test]
@@ -2230,6 +2302,18 @@ mod visual_contract {
     fn preview_left_toolbar_centering_uses_full_stack_height() {
         assert_eq!(preview_panel::preview_toolbar_height(), 190.0);
         assert_eq!(preview_panel::preview_toolbar_center_margin(), -95.0);
+    }
+
+    #[test]
+    fn preview_crop_handles_use_screen_space_cursors() {
+        assert_eq!(
+            preview_panel::crop_handle_screen_cursor(DragHandle::NorthEast),
+            "nesw-resize"
+        );
+        assert_eq!(
+            preview_panel::crop_handle_screen_cursor(DragHandle::NorthWest),
+            "nwse-resize"
+        );
     }
 }
 
