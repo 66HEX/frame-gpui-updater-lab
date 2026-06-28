@@ -30,8 +30,8 @@ To build and run Frame locally, you will need:
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/66HEX/frame.git
-   cd frame
+   git clone https://github.com/66HEX/frame-gpui-updater-lab.git
+   cd frame-gpui-updater-lab
    ```
 
 2. **Setup FFmpeg binaries:**
@@ -134,7 +134,7 @@ fixtures live in the GPUI test modules.
 ## Reporting Issues
 
 If you find a bug or have a feature request, please
-[open an issue](https://github.com/66HEX/frame/issues). Include your operating
+[open an issue](https://github.com/66HEX/frame-gpui-updater-lab/issues). Include your operating
 system, source media details when relevant, reproduction steps, and FFmpeg logs
 from the Logs view when conversion behavior is involved.
 

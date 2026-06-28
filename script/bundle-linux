@@ -74,15 +74,22 @@ eval "$gstreamer_env"
 
 export RUSTFLAGS="${RUSTFLAGS:-} -C link-args=-Wl,--disable-new-dtags,-rpath,\$ORIGIN/../lib"
 cargo build --manifest-path "$repo_root/frame-app/Cargo.toml" --release --target "$target_triple"
+cargo build --manifest-path "$repo_root/frame-updater/Cargo.toml" --release --target "$target_triple" --bin frame-update-helper
 
 binary_path="$target_dir/$target_triple/release/frame"
+helper_path="$target_dir/$target_triple/release/frame-update-helper"
 if [[ ! -x "$binary_path" ]]; then
 	echo "Missing release binary: $binary_path" >&2
+	exit 1
+fi
+if [[ ! -x "$helper_path" ]]; then
+	echo "Missing update helper binary: $helper_path" >&2
 	exit 1
 fi
 
 if command -v strip >/dev/null 2>&1; then
 	strip --strip-debug "$binary_path" || true
+	strip --strip-debug "$helper_path" || true
 fi
 
 temp_dir="$(mktemp -d)"
@@ -104,6 +111,7 @@ mkdir -p \
 	"$app_dir/share/icons/hicolor/512x512/apps"
 
 cp "$binary_path" "$app_dir/bin/frame"
+cp "$helper_path" "$app_dir/bin/frame-update-helper"
 
 find_libs() {
 	ldd "$binary_path" |
@@ -135,7 +143,7 @@ cp "$repo_root/frame-app/resources/app-icons/128x128@2x.png" "$app_dir/share/ico
 cp "$repo_root/frame-app/resources/app-icons/icon.png" "$app_dir/share/icons/hicolor/512x512/apps/frame.png"
 cp "$repo_root/LICENSE" "$app_dir/licenses.md"
 
-export APP_NAME="Frame"
+export APP_NAME="Frame GPUI Lab"
 export APP_CLI="frame"
 export APP_ICON="frame"
 
@@ -150,7 +158,7 @@ else
 fi
 chmod +x "$app_dir/share/applications/Frame.desktop"
 
-archive="$target_dir/release/frame-linux-$runtime_arch.tar.gz"
+archive="$target_dir/release/frame-gpui-lab-linux-$runtime_arch.tar.gz"
 mkdir -p "$(dirname "$archive")"
 rm -f "$archive"
 tar -czvf "$archive" -C "$temp_dir" frame.app

@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./icon.png" width="256" height="256" alt="Frame Icon" />
-  <h1>Frame</h1>
+  <h1>Frame GPUI Updater Lab</h1>
 </div>
 
 <div align="center">
@@ -13,7 +13,11 @@
   </a>
 </div>
 
-**Frame** is a native media conversion utility built in Rust. It provides a
+> [!IMPORTANT]
+> This repository is an isolated GPUI-CE updater test lab. It intentionally does
+> not publish Winget or Homebrew updates for the production Frame app.
+
+**Frame GPUI Lab** is a native media conversion utility built in Rust. It provides a
 desktop interface for FFmpeg operations, with granular control over video,
 audio, image, subtitle, and metadata settings. The application uses a GPUI-CE
 front end and a reusable Rust conversion core for FFmpeg argument generation,
@@ -32,7 +36,7 @@ source probing, compatibility validation, task control, and progress parsing.
 > - **macOS:** The system can flag the app and bundled binaries with a quarantine
 >   attribute. To run the app, remove the attribute manually:
 >   ```bash
->   xattr -dr com.apple.quarantine /Applications/Frame.app
+>   xattr -dr com.apple.quarantine "/Applications/Frame GPUI Lab.app"
 >   ```
 > - **Windows:** Windows SmartScreen may prevent the application from starting.
 >   Click **"More info"** and then **"Run anyway"** to proceed.
@@ -135,34 +139,33 @@ details, tier suggestions, and a launch checklist.
 The easiest way to get started is to download the latest release for your
 platform directly from GitHub.
 
-[**Download Latest Release**](https://github.com/66HEX/frame/releases)
+[**Download Latest Lab Release**](https://github.com/66HEX/frame-gpui-updater-lab/releases)
 
 > **Note:** Since the application is not yet code-signed, you may need to
 > manually approve it in your system settings.
 
+### Automatic Updates
+
+Native release builds include a signed-manifest updater. Frame GPUI Lab checks
+the latest GitHub Release manifest in this lab repository, verifies its Ed25519
+signature and the SHA-256 hash of the selected platform asset, then installs
+through a small bundled helper.
+
+For release builds, set `FRAME_UPDATE_PUBLIC_KEY` when compiling the app and set
+`FRAME_UPDATE_SIGNING_KEY` in GitHub Actions for manifest signing. The generated
+`.github/workflows/release.yml` publishes `update-manifest.json` and
+`update-manifest.json.sig` with the release assets.
+
 ### WinGet (Windows)
 
-Frame is available in the official WinGet repository under the `66HEX.Frame`
-identifier.
-
-```powershell
-winget install --id 66HEX.Frame -e
-```
-
-To update:
-
-```powershell
-winget upgrade --id 66HEX.Frame -e
-```
+Frame GPUI Lab is not published to Winget. Windows updater tests use the Inno
+installer uploaded to this repository's GitHub Releases.
 
 ### Homebrew (macOS)
 
-For macOS users, Frame is available through the custom Homebrew tap:
-
-```bash
-brew tap 66HEX/frame
-brew install --cask frame
-```
+Frame GPUI Lab is not published to Homebrew. macOS updater tests use the
+`FrameGpuiLab-<arch>.app.zip` asset uploaded to this repository's GitHub
+Releases.
 
 ### Build from Source
 
@@ -178,8 +181,8 @@ these steps.
 **2. Clone the Repository**
 
 ```bash
-git clone https://github.com/66HEX/frame.git
-cd frame
+git clone https://github.com/66HEX/frame-gpui-updater-lab.git
+cd frame-gpui-updater-lab
 ```
 
 **3. Setup Runtime Binaries**
@@ -264,9 +267,9 @@ cargo xtask ci
 ## Star History
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=66HEX/frame&type=timeline&theme=dark" />
-  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=66HEX/frame&type=timeline" />
-  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=66HEX/frame&type=timeline" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=66HEX/frame-gpui-updater-lab&type=timeline&theme=dark" />
+  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=66HEX/frame-gpui-updater-lab&type=timeline" />
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=66HEX/frame-gpui-updater-lab&type=timeline" />
 </picture>
 
 ## Acknowledgments & Third-Party Code

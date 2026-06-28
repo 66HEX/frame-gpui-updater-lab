@@ -9,6 +9,8 @@ use directories::ProjectDirs;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::app_info::FRAME_APP_ID;
+
 const MANIFEST_ENV: &str = "FRAME_GSTREAMER_MANIFEST";
 const MACOS_FRAMEWORK_ROOT: &str = "/Library/Frameworks/GStreamer.framework/Versions/1.0";
 const MACOS_BUNDLED_FRAMEWORK_RELATIVE: &[&str] = &[
@@ -277,7 +279,7 @@ fn validate_manifest(manifest: &GstreamerRuntimeManifest) -> Result<(), Gstreame
 }
 
 fn registry_cache_path() -> PathBuf {
-    ProjectDirs::from("", "", "Frame")
+    ProjectDirs::from("", "", FRAME_APP_ID)
         .map(|dirs| dirs.cache_dir().join("gstreamer-registry.bin"))
         .unwrap_or_else(|| env::temp_dir().join("frame-gstreamer-registry.bin"))
 }

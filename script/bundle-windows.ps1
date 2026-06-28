@@ -39,7 +39,7 @@ $Target = "$Architecture-pc-windows-msvc"
 $TargetDir = if ($env:CARGO_TARGET_DIR) { (Resolve-Path $env:CARGO_TARGET_DIR).Path } else { "$RepoRoot\target" }
 $ReleaseDir = "$TargetDir\$Target\release"
 $InnoDir = "$RepoRoot\target\inno\$Architecture"
-$InstallerPath = "$RepoRoot\target\Frame-$Architecture.exe"
+$InstallerPath = "$RepoRoot\target\FrameGpuiLab-$Architecture.exe"
 $Version = (Select-String -Path "$RepoRoot\frame-app\Cargo.toml" -Pattern '^version = "(.+)"$').Matches[0].Groups[1].Value
 
 function Invoke-Checked {
@@ -71,6 +71,7 @@ function Prepare-BundleDirectory {
     New-Item -Path "$InnoDir\binaries" -ItemType Directory -Force | Out-Null
 
     Copy-Item -Path "$ReleaseDir\frame.exe" -Destination "$InnoDir\Frame.exe" -Force
+    Copy-Item -Path "$ReleaseDir\frame-update-helper.exe" -Destination "$InnoDir\frame-update-helper.exe" -Force
     Copy-Item -Path "$RepoRoot\frame-app\resources\app-icons\icon.ico" -Destination "$InnoDir\app-icon.ico" -Force
     foreach ($binary in @("ffmpeg-$Target.exe", "ffprobe-$Target.exe")) {
         $source = "$RepoRoot\frame-app\resources\binaries\$binary"
@@ -92,8 +93,8 @@ function Build-Installer {
     }
 
     $definitions = @(
-        "/dAppName=Frame",
-        "/dAppSetupName=Frame-$Architecture",
+        "/dAppName=Frame GPUI Lab",
+        "/dAppSetupName=FrameGpuiLab-$Architecture",
         "/dAppVersion=$Version",
         "/dOutputDir=$RepoRoot\target",
         "/dResourcesDir=$InnoDir"
@@ -125,6 +126,7 @@ finally {
     Pop-Location
 }
 Invoke-Checked cargo build --manifest-path "$RepoRoot\frame-app\Cargo.toml" --release --target $Target
+Invoke-Checked cargo build --manifest-path "$RepoRoot\frame-updater\Cargo.toml" --release --target $Target --bin frame-update-helper
 Prepare-BundleDirectory
 Invoke-Checked cargo xtask stage-gstreamer --dir $InnoDir
 Build-Installer

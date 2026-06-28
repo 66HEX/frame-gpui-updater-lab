@@ -1,9 +1,9 @@
-#define AppId "{7D37707F-5F27-47B6-82EE-207B922EC013}"
+#define AppId "{CCFCC551-7612-4D99-8F81-8F02DF450FDA}"
 #ifndef AppName
-#define AppName "Frame"
+#define AppName "Frame GPUI Lab"
 #endif
 #ifndef AppSetupName
-#define AppSetupName "Frame-x86_64"
+#define AppSetupName "FrameGpuiLab-x86_64"
 #endif
 #ifndef AppVersion
 #define AppVersion "0.1.0"
@@ -20,11 +20,11 @@ AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=66HEX
-AppPublisherURL=https://github.com/66HEX/frame
-AppSupportURL=https://github.com/66HEX/frame/issues
-AppUpdatesURL=https://github.com/66HEX/frame/releases
-DefaultDirName={localappdata}\Programs\Frame
-DefaultGroupName=Frame
+AppPublisherURL=https://github.com/66HEX/frame-gpui-updater-lab
+AppSupportURL=https://github.com/66HEX/frame-gpui-updater-lab/issues
+AppUpdatesURL=https://github.com/66HEX/frame-gpui-updater-lab/releases
+DefaultDirName={localappdata}\Programs\Frame GPUI Lab
+DefaultGroupName=Frame GPUI Lab
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename={#AppSetupName}
@@ -45,13 +45,14 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#ResourcesDir}\Frame.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ResourcesDir}\frame-update-helper.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ResourcesDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ResourcesDir}\binaries\*"; DestDir: "{app}\binaries"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#ResourcesDir}\gstreamer\*"; DestDir: "{app}\gstreamer"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Frame"; Filename: "{app}\Frame.exe"
-Name: "{autodesktop}\Frame"; Filename: "{app}\Frame.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Frame GPUI Lab"; Filename: "{app}\Frame.exe"
+Name: "{autodesktop}\Frame GPUI Lab"; Filename: "{app}\Frame.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Frame.exe"; Description: "{cm:LaunchProgram,Frame}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Frame.exe"; Description: "{cm:LaunchProgram,Frame GPUI Lab}"; Flags: nowait postinstall skipifsilent

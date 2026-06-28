@@ -31,8 +31,8 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@v4
       with:
-        name: frame-linux-x86_64.tar.gz
-        path: target/release/frame-linux-x86_64.tar.gz
+        name: frame-gpui-lab-linux-x86_64.tar.gz
+        path: target/release/frame-gpui-lab-linux-x86_64.tar.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_linux_aarch64:
@@ -56,8 +56,8 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@v4
       with:
-        name: frame-linux-aarch64.tar.gz
-        path: target/release/frame-linux-aarch64.tar.gz
+        name: frame-gpui-lab-linux-aarch64.tar.gz
+        path: target/release/frame-gpui-lab-linux-aarch64.tar.gz
         if-no-files-found: error
     timeout-minutes: 60
   bundle_macos_x86_64:
@@ -79,8 +79,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Frame-x86_64.dmg
-        path: target/x86_64-apple-darwin/release/Frame-x86_64.dmg
+        name: FrameGpuiLab-x86_64.dmg
+        path: target/x86_64-apple-darwin/release/FrameGpuiLab-x86_64.dmg
+        if-no-files-found: error
+    - name: run_bundling::upload_update_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FrameGpuiLab-x86_64.app.zip
+        path: target/x86_64-apple-darwin/release/FrameGpuiLab-x86_64.app.zip
         if-no-files-found: error
     timeout-minutes: 60
   bundle_macos_aarch64:
@@ -102,8 +108,14 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Frame-aarch64.dmg
-        path: target/aarch64-apple-darwin/release/Frame-aarch64.dmg
+        name: FrameGpuiLab-aarch64.dmg
+        path: target/aarch64-apple-darwin/release/FrameGpuiLab-aarch64.dmg
+        if-no-files-found: error
+    - name: run_bundling::upload_update_artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FrameGpuiLab-aarch64.app.zip
+        path: target/aarch64-apple-darwin/release/FrameGpuiLab-aarch64.app.zip
         if-no-files-found: error
     timeout-minutes: 60
   bundle_windows_x86_64:
@@ -124,7 +136,7 @@ jobs:
     - name: run_bundling::upload_artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Frame-x86_64.exe
-        path: target/Frame-x86_64.exe
+        name: FrameGpuiLab-x86_64.exe
+        path: target/FrameGpuiLab-x86_64.exe
         if-no-files-found: error
     timeout-minutes: 60
