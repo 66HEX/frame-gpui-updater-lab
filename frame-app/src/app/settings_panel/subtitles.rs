@@ -883,20 +883,20 @@ fn settings_subtitle_sv_square(
         .child(
             div()
                 .absolute()
-                .left(px(1.0))
-                .right(px(1.0))
-                .top(px(1.0))
-                .bottom(px(1.0))
+                .left(px(0.0))
+                .right(px(0.0))
+                .top(px(0.0))
+                .bottom(px(0.0))
                 .rounded(px(theme::RADIUS_XS))
                 .bg(hue),
         )
         .child(
             div()
                 .absolute()
-                .left(px(1.0))
-                .right(px(1.0))
-                .top(px(1.0))
-                .bottom(px(1.0))
+                .left(px(0.0))
+                .right(px(0.0))
+                .top(px(0.0))
+                .bottom(px(0.0))
                 .rounded(px(theme::RADIUS_XS))
                 .bg(linear_gradient(
                     90.0,
@@ -907,15 +907,15 @@ fn settings_subtitle_sv_square(
         .child(
             div()
                 .absolute()
-                .left(px(1.0))
-                .right(px(1.0))
-                .top(px(1.0))
-                .bottom(px(1.0))
+                .left(px(0.0))
+                .right(px(0.0))
+                .top(px(0.0))
+                .bottom(px(0.0))
                 .rounded(px(theme::RADIUS_XS))
                 .bg(linear_gradient(
                     0.0,
-                    linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 0.0),
-                    linear_color_stop(hsla(0.0, 0.0, 0.0, 1.0), 1.0),
+                    linear_color_stop(hsla(0.0, 0.0, 0.0, 1.0), 0.0),
+                    linear_color_stop(hsla(0.0, 0.0, 0.0, 0.0), 1.0),
                 )),
         )
         .child(
