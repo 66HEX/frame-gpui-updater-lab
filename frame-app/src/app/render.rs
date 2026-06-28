@@ -113,6 +113,12 @@ impl Render for FrameRoot {
                             outline: Some(&subtitle_outline_color_focus),
                         },
                         subtitle_popover: self.subtitle_ui.popover,
+                        subtitle_font_select_scroll_handle: &self
+                            .subtitle_ui
+                            .font_select_scroll_handle,
+                        subtitle_font_size_select_scroll_handle: &self
+                            .subtitle_ui
+                            .font_size_select_scroll_handle,
                         subtitle_font_color_draft: &self.subtitle_ui.font_color_draft,
                         subtitle_outline_color_draft: &self.subtitle_ui.outline_color_draft,
                         subtitle_font_color_hsv_draft: self.subtitle_ui.font_color_hsv_draft,

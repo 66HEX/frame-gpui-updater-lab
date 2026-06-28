@@ -1856,6 +1856,9 @@ mod preview_shell {
         metadata: Option<&'a SourceMetadata>,
         status: MetadataStatus,
     ) -> SettingsRenderState<'a> {
+        let subtitle_font_select_scroll_handle = Box::leak(Box::new(ScrollHandle::new()));
+        let subtitle_font_size_select_scroll_handle = Box::leak(Box::new(ScrollHandle::new()));
+
         SettingsRenderState {
             active_tab: SettingsTab::Source,
             config,
@@ -1883,6 +1886,8 @@ mod preview_shell {
                 outline: None,
             },
             subtitle_popover: None,
+            subtitle_font_select_scroll_handle,
+            subtitle_font_size_select_scroll_handle,
             subtitle_font_color_draft: "",
             subtitle_outline_color_draft: "",
             subtitle_font_color_hsv_draft: hex_to_subtitle_hsv(DEFAULT_SUBTITLE_FONT_COLOR),

@@ -6,6 +6,7 @@ const SUBTITLE_POPOVER_TOP_OFFSET: f32 =
     SUBTITLE_FIELD_LABEL_STACK_HEIGHT + SETTINGS_CONTROL_HEIGHT + SUBTITLE_POPOVER_TRIGGER_GAP;
 const SUBTITLE_SELECT_MAX_HEIGHT: f32 = 192.0;
 const SUBTITLE_SELECT_CONTENT_PADDING: f32 = 4.0;
+const SUBTITLE_SELECT_OPTION_HEIGHT: f32 = 28.0;
 const SUBTITLE_COLOR_PANEL_WIDTH: f32 = 220.0;
 const SUBTITLE_COLOR_SV_HEIGHT: f32 = 96.0;
 const SUBTITLE_COLOR_HUE_HEIGHT: f32 = 10.0;
@@ -98,6 +99,8 @@ pub(in crate::app) struct SettingsSubtitlesTabState<'a> {
     pub(in crate::app) subtitle_fonts: &'a [String],
     pub(in crate::app) color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     pub(in crate::app) active_popover: Option<SettingsSubtitlePopover>,
+    pub(in crate::app) font_select_scroll_handle: &'a ScrollHandle,
+    pub(in crate::app) font_size_select_scroll_handle: &'a ScrollHandle,
     pub(in crate::app) font_color_draft: &'a str,
     pub(in crate::app) outline_color_draft: &'a str,
     pub(in crate::app) font_color_hsv_draft: SettingsSubtitleHsv,
@@ -110,6 +113,8 @@ struct SettingsSubtitleStyleState<'a> {
     subtitle_fonts: &'a [String],
     color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     active_popover: Option<SettingsSubtitlePopover>,
+    font_select_scroll_handle: &'a ScrollHandle,
+    font_size_select_scroll_handle: &'a ScrollHandle,
     font_color_draft: &'a str,
     outline_color_draft: &'a str,
     font_color_hsv_draft: SettingsSubtitleHsv,
@@ -157,6 +162,8 @@ pub(in crate::app) fn settings_subtitles_tab(
                     subtitle_fonts: state.subtitle_fonts,
                     color_focuses: state.color_focuses,
                     active_popover: state.active_popover,
+                    font_select_scroll_handle: state.font_select_scroll_handle,
+                    font_size_select_scroll_handle: state.font_size_select_scroll_handle,
                     font_color_draft: state.font_color_draft,
                     outline_color_draft: state.outline_color_draft,
                     font_color_hsv_draft: state.font_color_hsv_draft,
@@ -298,12 +305,14 @@ fn settings_subtitle_style_controls(
                     state.disabled,
                     state.subtitle_fonts,
                     state.active_popover == Some(SettingsSubtitlePopover::FontName),
+                    state.font_select_scroll_handle,
                     cx,
                 ))
                 .child(settings_subtitle_font_size_select(
                     state.config,
                     state.disabled,
                     state.active_popover == Some(SettingsSubtitlePopover::FontSize),
+                    state.font_size_select_scroll_handle,
                     cx,
                 )),
         )
@@ -372,6 +381,7 @@ fn settings_subtitle_font_select(
     disabled: bool,
     subtitle_fonts: &[String],
     is_open: bool,
+    scroll_handle: &ScrollHandle,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let display = config
@@ -398,29 +408,47 @@ fn settings_subtitle_font_select(
         ));
 
     if is_open && has_options {
+        let content_height = subtitle_select_content_height(options.len());
         let mut list = div()
+            .id("settings-subtitle-font-options-list")
+            .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
+            .overflow_y_scroll()
+            .track_scroll(scroll_handle)
+            .p(px(SUBTITLE_SELECT_CONTENT_PADDING))
+            .on_scroll_wheel(refresh_subtitle_select_hover_after_scroll);
+
+        for option in options {
+            let name = option.name.clone();
+            let is_enabled = !option.is_disabled;
+            list = list.child(settings_subtitle_font_option(option, is_enabled, name, cx));
+        }
+
+        let mut popover = div()
             .absolute()
             .id("settings-subtitle-font-options")
             .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
             .left_0()
             .right_0()
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
-            .overflow_y_scroll()
+            .overflow_hidden()
             .rounded(px(theme::RADIUS_SM))
             .bg(color(theme::DROPDOWN))
-            .p(px(SUBTITLE_SELECT_CONTENT_PADDING))
             .shadow(button_highlight_shadows())
             .occlude()
-            .on_scroll_wheel(refresh_subtitle_select_hover_after_scroll)
             .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
                 cx.stop_propagation();
-            });
-        for option in options {
-            let name = option.name.clone();
-            let is_enabled = !option.is_disabled;
-            list = list.child(settings_subtitle_font_option(option, is_enabled, name, cx));
+            })
+            .child(list);
+
+        if content_height > SUBTITLE_SELECT_MAX_HEIGHT {
+            popover = popover.child(frame_vertical_scrollbar(
+                "settings-subtitle-font-options-scrollbar",
+                scroll_handle.clone(),
+                content_height,
+            ));
         }
-        field = field.child(deferred(list).with_priority(10));
+
+        field = field.child(deferred(popover).with_priority(10));
     }
 
     field
@@ -430,6 +458,7 @@ fn settings_subtitle_font_size_select(
     config: &ConversionConfig,
     disabled: bool,
     is_open: bool,
+    scroll_handle: &ScrollHandle,
     cx: &mut Context<FrameRoot>,
 ) -> gpui::Div {
     let display = config
@@ -455,23 +484,14 @@ fn settings_subtitle_font_size_select(
         ));
 
     if is_open {
+        let content_height = subtitle_select_content_height(options.len());
         let mut list = div()
-            .absolute()
-            .id("settings-subtitle-font-size-options")
-            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
-            .left_0()
-            .right_0()
+            .id("settings-subtitle-font-size-options-list")
             .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
             .overflow_y_scroll()
-            .rounded(px(theme::RADIUS_SM))
-            .bg(color(theme::DROPDOWN))
+            .track_scroll(scroll_handle)
             .p(px(SUBTITLE_SELECT_CONTENT_PADDING))
-            .shadow(button_highlight_shadows())
-            .occlude()
-            .on_scroll_wheel(refresh_subtitle_select_hover_after_scroll)
-            .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
-                cx.stop_propagation();
-            });
+            .on_scroll_wheel(refresh_subtitle_select_hover_after_scroll);
 
         for option in options {
             let size = option.size;
@@ -479,7 +499,32 @@ fn settings_subtitle_font_size_select(
             list = list.child(settings_subtitle_size_option(option, is_enabled, size, cx));
         }
 
-        field = field.child(deferred(list).with_priority(10));
+        let mut popover = div()
+            .absolute()
+            .id("settings-subtitle-font-size-options")
+            .top(px(SUBTITLE_POPOVER_TOP_OFFSET))
+            .left_0()
+            .right_0()
+            .max_h(px(SUBTITLE_SELECT_MAX_HEIGHT))
+            .overflow_hidden()
+            .rounded(px(theme::RADIUS_SM))
+            .bg(color(theme::DROPDOWN))
+            .shadow(button_highlight_shadows())
+            .occlude()
+            .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
+                cx.stop_propagation();
+            })
+            .child(list);
+
+        if content_height > SUBTITLE_SELECT_MAX_HEIGHT {
+            popover = popover.child(frame_vertical_scrollbar(
+                "settings-subtitle-font-size-options-scrollbar",
+                scroll_handle.clone(),
+                content_height,
+            ));
+        }
+
+        field = field.child(deferred(popover).with_priority(10));
     }
 
     field
@@ -551,6 +596,7 @@ fn refresh_subtitle_select_hover_after_scroll(
     window: &mut Window,
     _cx: &mut App,
 ) {
+    window.refresh();
     window.on_next_frame(|window, cx| {
         window.dispatch_event(
             PlatformInput::MouseMove(MouseMoveEvent {
@@ -613,6 +659,10 @@ fn settings_subtitle_size_option(
     }))
 }
 
+fn subtitle_select_content_height(option_count: usize) -> f32 {
+    option_count as f32 * SUBTITLE_SELECT_OPTION_HEIGHT + SUBTITLE_SELECT_CONTENT_PADDING * 2.0
+}
+
 fn settings_subtitle_select_option(
     id: impl Into<String>,
     label: impl Into<String>,
@@ -628,7 +678,7 @@ fn settings_subtitle_select_option(
 
     div()
         .id(id.into())
-        .h(px(28.0))
+        .h(px(SUBTITLE_SELECT_OPTION_HEIGHT))
         .w_full()
         .flex()
         .items_center()

@@ -132,11 +132,11 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, LayoutId, Menu, MenuItem, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, PaintQuad, PinchEvent, Pixels,
     PlatformInput, Point, Position, PromptButton, PromptLevel, Render, RenderImage, Rgba,
-    ScrollDelta, ScrollStrategy, ScrollWheelEvent, ShapedLine, SharedString,
+    ScrollDelta, ScrollHandle, ScrollStrategy, ScrollWheelEvent, ShapedLine, SharedString,
     StatefulInteractiveElement, Style, Task, TextRun, TitlebarOptions, UTF16Selection,
     UniformListScrollHandle, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowDecorations, WindowOptions, actions, deferred, div, fill, hsla, img, linear_color_stop,
-    linear_gradient, point, prelude::*, px, relative, size, svg, uniform_list,
+    WindowDecorations, WindowOptions, actions, canvas, deferred, div, fill, hsla, img,
+    linear_color_stop, linear_gradient, point, prelude::*, px, relative, size, svg, uniform_list,
 };
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindowButton};
@@ -263,6 +263,8 @@ impl Default for SettingsUiState {
 
 struct SubtitleUiState {
     popover: Option<SettingsSubtitlePopover>,
+    font_select_scroll_handle: ScrollHandle,
+    font_size_select_scroll_handle: ScrollHandle,
     font_color_draft: String,
     outline_color_draft: String,
     font_color_hsv_draft: SettingsSubtitleHsv,
@@ -274,6 +276,8 @@ impl Default for SubtitleUiState {
     fn default() -> Self {
         Self {
             popover: None,
+            font_select_scroll_handle: ScrollHandle::new(),
+            font_size_select_scroll_handle: ScrollHandle::new(),
             font_color_draft: DEFAULT_SUBTITLE_FONT_COLOR.to_uppercase(),
             outline_color_draft: DEFAULT_SUBTITLE_OUTLINE_COLOR.to_uppercase(),
             font_color_hsv_draft: settings_panel::hex_to_subtitle_hsv(DEFAULT_SUBTITLE_FONT_COLOR),
@@ -487,6 +491,8 @@ struct SettingsRenderState<'a> {
     metadata_focuses: SettingsMetadataInputFocuses<'a>,
     subtitle_color_focuses: SettingsSubtitleColorInputFocuses<'a>,
     subtitle_popover: Option<SettingsSubtitlePopover>,
+    subtitle_font_select_scroll_handle: &'a ScrollHandle,
+    subtitle_font_size_select_scroll_handle: &'a ScrollHandle,
     subtitle_font_color_draft: &'a str,
     subtitle_outline_color_draft: &'a str,
     subtitle_font_color_hsv_draft: SettingsSubtitleHsv,

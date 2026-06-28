@@ -1,4 +1,6 @@
-use super::components::{FrameIconButtonVariant, frame_icon_button};
+use super::components::{
+    FrameIconButtonVariant, frame_icon_button, frame_vertical_uniform_scrollbar,
+};
 use super::primitives::*;
 use super::*;
 
@@ -142,7 +144,7 @@ pub(super) fn log_lines_list(
     let selected_id = selected_id.to_string();
     let list_id = element_id("logs-line-list", &selected_id);
 
-    uniform_list(
+    let list = uniform_list(
         list_id,
         line_count,
         cx.processor(move |root, range, _window, _cx| {
@@ -160,11 +162,22 @@ pub(super) fn log_lines_list(
                 cx.notify();
             }
         });
+        cx.notify();
     }))
     .size_full()
     .p(px(2.0))
     .text_color(color(theme::FOREGROUND))
-    .line_height(px(LOG_LINE_HEIGHT))
+    .line_height(px(LOG_LINE_HEIGHT));
+
+    div()
+        .relative()
+        .size_full()
+        .child(list)
+        .child(frame_vertical_uniform_scrollbar(
+            "logs-line-list-scrollbar",
+            scroll_handle,
+            line_count as f32 * LOG_LINE_HEIGHT,
+        ))
 }
 
 pub(super) fn log_line_row(line: LogLine) -> impl IntoElement {
